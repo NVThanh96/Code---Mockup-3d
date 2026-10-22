@@ -705,6 +705,32 @@ function ps3d_scanDieline() {
                 var lName = (layerName || '').toLowerCase();
                 var sColor = item.stroked && item.strokeColor;
 
+                // 0. LỌC BỎ HOÀN TOÀN BLEED (MÀU XANH LÁ) VÀ CÁC LAYER KÍCH THƯỚC / CHÚ THÍCH
+                if (lName.indexOf('bleed') !== -1 || lName.indexOf('tran') !== -1 || lName.indexOf('tràn') !== -1) {
+                    return; // Bỏ qua layer Bleed
+                }
+                if (lName.indexOf('dim') !== -1 || lName.indexOf('kich_thuoc') !== -1 ||
+                    lName.indexOf('kích thước') !== -1 || lName.indexOf('annotation') !== -1 ||
+                    lName.indexOf('ghi_chu') !== -1 || lName.indexOf('note') !== -1) {
+                    return; // Bỏ qua layer ghi chú kích thước
+                }
+
+                // Nhận diện màu nét BLEED (Xanh lá chuẩn Pacdora C:75, M:0, Y:100, K:0 hoặc RGB G > 120)
+                if (sColor && sColor.typename === 'CMYKColor') {
+                    if (sColor.cyan > 35 && sColor.yellow > 45 && sColor.magenta < 25) {
+                        return; // Bỏ qua nét Bleed xanh lá CMYK
+                    }
+                } else if (sColor && sColor.typename === 'RGBColor') {
+                    if (sColor.green > 120 && sColor.green > sColor.red * 1.25 && sColor.green > sColor.blue * 1.25) {
+                        return; // Bỏ qua nét Bleed xanh lá RGB
+                    }
+                } else if (sColor && sColor.typename === 'SpotColor') {
+                    var spBleedName = (sColor.spot && sColor.spot.name || '').toLowerCase();
+                    if (spBleedName.indexOf('bleed') !== -1 || spBleedName.indexOf('tran') !== -1 || spBleedName.indexOf('tràn') !== -1) {
+                        return; // Bỏ qua nét Bleed Spot color
+                    }
+                }
+
                 // 1. Nhận diện theo tên Layer (crease, gap, cấn, can, fold...)
                 if (lName.indexOf('crease') !== -1 || lName.indexOf('can') !== -1 ||
                     lName.indexOf('cấn') !== -1 || lName.indexOf('gap') !== -1 ||
@@ -1169,8 +1195,8 @@ function ps3d_scanDieline() {
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 320, W: 255, H: 75 };
                 } else if (lowText.indexOf('định hình') !== -1 || (bClust.innerCutouts && bClust.innerCutouts.length >= 3)) {
                     subName = 'Khay định hình 4 ô';
-                    boxType = 'tray';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 305, W: 240, H: 50 };
+                    boxType = 'divider-tray';
+                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 305, W: 240, H: 45 };
                 } else if (lowText.indexOf('khay') !== -1 || lowText.indexOf('đáy') !== -1) {
                     subName = 'Khay đựng';
                     boxType = 'tray';
@@ -1203,12 +1229,12 @@ function ps3d_scanDieline() {
                     drc = (drcVals && drcVals.d1 <= 150) ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 105, W: 105, H: 70 };
                 } else if (lowText.indexOf('khoai tây') !== -1) {
                     subName = 'Hộp đựng khoai tây chiên';
-                    boxType = 'tray';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 110, W: 45, H: 130 };
+                    boxType = 'fries-box';
+                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 85, W: 50, H: 110 };
                 } else if (lowText.indexOf('túi') !== -1) {
                     subName = 'Túi đựng gà rán';
-                    boxType = 'tote-bag';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 220, W: 100, H: 200 };
+                    boxType = 'chicken-bag';
+                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 200, W: 100, H: 300 };
                 } else {
                     subName = 'Hộp đựng gà rán';
                     boxType = 'reverse-tuck';
@@ -1219,7 +1245,7 @@ function ps3d_scanDieline() {
             else if (comboLow.indexOf('sinh nhật') !== -1 || lowText.indexOf('sinh nhật') !== -1 || lowText.indexOf('bánh kem') !== -1) {
                 groupName = 'Hộp bánh sinh nhật';
                 subName = 'Hộp bánh sinh nhật';
-                boxType = 'mailer-box';
+                boxType = 'cake-box';
                 drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 260, W: 260, H: 180 };
             }
             // E. Nhóm: HỘP BÁNH TRUNG THU 2 BÁNH
@@ -1235,11 +1261,11 @@ function ps3d_scanDieline() {
                 if (lowText.indexOf('bì thư') !== -1 || lowText.indexOf('phong bì') !== -1) {
                     var isBig = (lowText.indexOf('25x34') !== -1 || lowText.indexOf('25×34') !== -1 || bClust.w > 300);
                     subName = isBig ? 'Bì thư 25x34' : 'Bì thư 12x22';
-                    boxType = 'straight-tuck';
+                    boxType = 'envelope';
                     drc = isBig ? { L: 340, W: 250, H: 15 } : { L: 220, W: 120, H: 10 };
                 } else if (lowText.indexOf('có nắp') !== -1) {
                     subName = 'Túi giấy có nắp';
-                    boxType = 'tote-bag';
+                    boxType = 'chicken-bag';
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 250, W: 100, H: 300 };
                 } else {
                     subName = 'Túi giấy không nắp';
@@ -1260,7 +1286,7 @@ function ps3d_scanDieline() {
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
                 } else if (lowText.indexOf('quai xách') !== -1 || lowText.indexOf('chóp') !== -1) {
                     subName = 'Hộp chóp có quai xách';
-                    boxType = 'straight-tuck';
+                    boxType = 'gable-box';
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: Math.round((bClust.w - 15) * 0.28), W: Math.round((bClust.w - 15) * 0.22), H: Math.round(bClust.h * 0.55) };
                 } else if (lowText.indexOf('dẹp') !== -1 || lowText.indexOf('đẹp') !== -1) {
                     subName = 'Hộp dẹp - đáy dán';
@@ -1272,7 +1298,7 @@ function ps3d_scanDieline() {
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
                 } else if (lowText.indexOf('thùng') !== -1 || lowText.indexOf('carton') !== -1) {
                     subName = 'Thùng carton';
-                    boxType = 'mailer-box';
+                    boxType = 'rsc-carton';
                     drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: Math.round(bClust.w * 0.35), W: Math.round(bClust.w * 0.25), H: Math.round(bClust.h * 0.4) };
                 } else if (lowText.indexOf('gài') !== -1 || lowText.indexOf('nắp gài') !== -1) {
                     subName = 'Hộp nắp gài đáy gài';

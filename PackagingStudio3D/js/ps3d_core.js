@@ -286,6 +286,7 @@
             pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
         }
     }
+    PS3D.arc = arc;
 
     PS3D.rect = function (x, y, w, h) {
         return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
@@ -984,6 +985,20 @@
         var tplId = 'custom-scanned-' + (dielineData.id || Date.now());
         var tplName = dielineData.name || ('Khuôn AI: ' + (dielineData.docName || 'File hiện tại'));
 
+        var bType = (dielineData.boxType || '').toLowerCase();
+        var isTrayOrFlat = (bType === 'tray' || bType === 'divider-tray' ||
+                            bType === 'envelope' || bType === 'burger-box' ||
+                            bType === 'fries-box' || bType === 'mailer-box');
+
+        var rootPanel = panels.find(function (p) { return !p.parent; }) || panels[0];
+        if (!isTrayOrFlat && rootPanel) {
+            var children = panels.filter(function (p) { return p.parent === rootPanel.id; });
+            if (children.length >= 4) {
+                isTrayOrFlat = true;
+            }
+        }
+        var computedRotX = isTrayOrFlat ? 90 : 0;
+
         var template = {
             id: tplId,
             name: tplName,
@@ -991,7 +1006,7 @@
             group: dielineData.group || 'Khuôn đã lưu',
             boxType: dielineData.boxType || 'custom',
             drc: dielineData.drc || null,
-            closedRotX: 0,
+            closedRotX: computedRotX,
             isCustom: true,
             scannedCuts: cuts,
             scannedCreases: detectedCreases,
@@ -1025,7 +1040,7 @@
             panels: panels,
             byId: builtById,
             creases: detectedCreases,
-            closedRotX: 0,
+            closedRotX: computedRotX,
             bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY },
             dims: [
                 { a: [minX, (minY + maxY) / 2], b: [maxX, (minY + maxY) / 2], label: Math.round(w) + ' mm' },
@@ -1038,6 +1053,7 @@
     function ease(p) { p = clamp(p, 0, 1); return p * p * (3 - 2 * p); }
 
     PS3D.Folder = function (THREE, model, opts) {
+        opts = opts || {};
         this.THREE = THREE;
         this.model = model;
         this.root = new THREE.Group();
@@ -1045,16 +1061,16 @@
         this.inner = new THREE.Group();
         this.root.add(this.pivot);
         this.pivot.add(this.inner);
-        this.paperMap = opts.paperMap;
+        this.paperMap = opts.paperMap || null;
 
         var rough = (opts.roughness !== undefined) ? opts.roughness : 0.74;
         var metal = (opts.metalness !== undefined) ? opts.metalness : 0.0;
-        this.frontMat = new THREE.MeshStandardMaterial({ map: opts.paperMap, roughness: rough, metalness: metal, side: THREE.FrontSide });
-        this.backMat = new THREE.MeshStandardMaterial({ map: opts.backMap || opts.paperMap, roughness: 0.86, metalness: 0.0, side: THREE.BackSide });
+        this.frontMat = new THREE.MeshStandardMaterial({ map: opts.paperMap || null, roughness: rough, metalness: metal, side: THREE.FrontSide });
+        this.backMat = new THREE.MeshStandardMaterial({ map: opts.backMap || opts.paperMap || null, roughness: 0.86, metalness: 0.0, side: THREE.BackSide });
         this.lineMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 });
         this.creaseMat = new THREE.LineBasicMaterial({ color: 0xee2222, linewidth: 2, transparent: true, opacity: 0.85 });
 
-        var uv = opts.uvRect;
+        var uv = opts.uvRect || PS3D.artboardRect(model, 3);
         var self = this;
         this.nodes = [];
         var nodeById = {};
