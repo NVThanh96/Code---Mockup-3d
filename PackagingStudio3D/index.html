@@ -126,7 +126,7 @@
         <div class="section-header" data-toggle="sec-params">
           <div class="sec-title">
             <span class="toggle-icon">▼</span>
-            <span>📐 Kích thước (mm)</span>
+            <span>📐 Kích thước thành phẩm (mm)</span>
           </div>
           <span id="tpl-name-label" class="badge-hl"></span>
         </div>
@@ -150,6 +150,8 @@
 
           <!-- Thông số khuôn bế live -->
           <div class="dieline-live-box">
+            <div class="dl-preview2d-title">Khuôn 2D chuẩn hóa <span class="lg-legend"><i class="lg-cut"></i>CUT <i class="lg-crease"></i>CREASE</span></div>
+            <div class="dl-preview2d" id="dieline-preview2d"></div>
             <div class="dl-row">
               <span class="dl-lbl">Khổ trải khuôn:</span>
               <span class="dl-val" id="info-size">—</span>
@@ -197,6 +199,12 @@
           <div class="action-grid">
             <button class="btn btn-primary" id="btn-scan-dieline" style="grid-column: 1 / -1; background: linear-gradient(135deg, #2563eb, #7c3aed); font-weight: 600;" title="Quét mọi đường khuôn (Cắt & Cấn) trong file Illustrator này và biến thành 3D">
               ⚡ Quét khuôn AI này → Dựng 3D (Tự Do)
+            </button>
+            <label class="chk-row" style="grid-column: 1 / -1; margin:0">
+              <input type="checkbox" id="chk-auto-rebuild2d" checked/> Tự vẽ lại khuôn 2D chuẩn sang artboard mới sau khi quét
+            </label>
+            <button class="btn btn-secondary" id="btn-rebuild-2d" style="grid-column: 1 / -1;" title="Vẽ lại khuôn đang xem (hoặc cả combo) chuẩn kỹ thuật: CUT xanh dương, CREASE đỏ nét đứt, BLEED xanh lá — sang artboard mới">
+              📐 Vẽ lại khuôn 2D chuẩn → Artboard mới
             </button>
             <button class="btn btn-secondary" id="btn-new-doc" title="Tạo file AI mới với khuôn 2D chuẩn kỹ thuật">
               ✚ Tạo file mới
@@ -283,6 +291,7 @@
 <script src="templates/cake_box.js"></script>
 <script src="templates/divider_tray.js"></script>
 <script src="templates/envelope.js"></script>
+<script src="templates/double_wall_tray.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

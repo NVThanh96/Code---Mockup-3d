@@ -946,3 +946,93 @@ html, body {
     height: 0 !important;
     flex: none !important;
 }
+
+/* ── Nhóm thư viện thông minh (Group Card thu gọn / mở rộng) ── */
+.lib-group-head {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    margin-top: 2px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+.lib-group-head:hover { background: var(--bg-hover); }
+.lib-group-head.collapsed { border-left-color: var(--text-dim); opacity: 0.85; }
+.lib-group-head .lg-caret { font-size: 8px; color: var(--text-dim); width: 9px; }
+.lib-group-head .lg-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lib-group-head .lg-count {
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--bg-input);
+    border-radius: 8px;
+    padding: 0 6px;
+}
+.lib-group-head .lg-combo {
+    height: 20px;
+    padding: 0 7px;
+    font-size: 10px;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lib-group-head .lg-combo:hover { background: var(--accent-hover); }
+
+/* ── Preview khuôn 2D chuẩn hóa ── */
+.dl-preview2d-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+.dl-preview2d-title .lg-legend { display: flex; align-items: center; gap: 4px; }
+.dl-preview2d-title .lg-legend i { display: inline-block; width: 14px; height: 0; margin-left: 4px; }
+.dl-preview2d-title .lg-cut { border-top: 2px solid #3b8de6; }
+.dl-preview2d-title .lg-crease { border-top: 2px dashed #e33; }
+.dl-preview2d {
+    height: 150px;
+    background: #fbfbfd;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 6px;
+    padding: 4px;
+    box-sizing: border-box;
+}
+.dl-preview2d svg { display: block; }
+
+/* Danh sách thành phần combo trong bảng kích thước */
+.dim-box.combo-part {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.dim-box.combo-part:hover { border-color: var(--accent); }
+.dim-box.combo-part span { font-size: 11px; color: var(--text-main); text-align: left; }
+.dim-box.combo-part b { font-size: 11px; color: var(--accent); font-weight: 600; }

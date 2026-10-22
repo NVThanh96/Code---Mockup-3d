@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CHUẨN HÓA KHUÔN BAO BÌ 3D - EXTENDSCRIPT TỰ ĐỘNG PHÂN TÁCH TOPOLOGY
  * Tương thích chuẩn công nghiệp Pacdora / Packaging Studio 3D:
  *   - CUT_LINE:        Nét xanh dương (#0066ee), 0.75pt, nét liền
@@ -115,6 +115,53 @@
     var creaseItems = [];
     var bleedItems = [];
     var dimItems = [];
+    var frameItems = [];
+
+    // Text số đo ("37cm", "7", "30.5 cm") → tâm (pt) để nhận diện đường ghi kích thước
+    var dimTextPts = [];
+    for (var dt = 0; dt < doc.textFrames.length; dt++) {
+        try {
+            var dtf = doc.textFrames[dt];
+            var dtxt = String(dtf.contents || '').replace(/^\s+|\s+$/g, '');
+            if (/^[0-9]+(?:[.,][0-9]+)?\s*(?:cm|mm|m)?$/i.test(dtxt)) {
+                var dgb = dtf.geometricBounds;
+                dimTextPts.push([(dgb[0] + dgb[2]) / 2, (dgb[1] + dgb[3]) / 2, Math.abs(dgb[1] - dgb[3])]);
+            }
+        } catch (eDT) {}
+    }
+    function distPtSeg(p, a, b) {
+        var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+        var t = L2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
+        var ex = a[0] + dx * t - p[0], ey = a[1] + dy * t - p[1];
+        return Math.sqrt(ex * ex + ey * ey);
+    }
+    // KHUNG NHÓM: hình chữ nhật 4 đỉnh, chứa nét khác bên trong, không có đỉnh nét nào chạm viền khung
+    function isContainerFrame(it) {
+        if (!it.closed || it.pathPoints.length < 4 || it.pathPoints.length > 5) return false;
+        var g = it.geometricBounds; // [L, T, R, B]
+        if (Math.abs(g[2] - g[0]) < 40 * toPT || Math.abs(g[1] - g[3]) < 30 * toPT) return false;
+        for (var a = 0; a < it.pathPoints.length; a++) {
+            var an = it.pathPoints[a].anchor;
+            var onX = Math.abs(an[0] - g[0]) < 2 || Math.abs(an[0] - g[2]) < 2;
+            var onY = Math.abs(an[1] - g[1]) < 2 || Math.abs(an[1] - g[3]) < 2;
+            if (!onX || !onY) return false;
+        }
+        var nIn = 0, tol = 1.2 * toPT;
+        for (var o = 0; o < allPaths.length; o++) {
+            var Q = allPaths[o];
+            if (Q === it) continue;
+            var qb = Q.geometricBounds;
+            if (qb[2] < g[0] - tol || qb[0] > g[2] + tol || qb[3] > g[1] + tol || qb[1] < g[3] - tol) continue;
+            if (qb[0] >= g[0] && qb[2] <= g[2] && qb[1] <= g[1] && qb[3] >= g[3]) nIn++;
+            for (var v = 0; v < Q.pathPoints.length; v++) {
+                var qa = Q.pathPoints[v].anchor;
+                var nearV = (Math.abs(qa[0] - g[0]) < tol || Math.abs(qa[0] - g[2]) < tol) && qa[1] <= g[1] + tol && qa[1] >= g[3] - tol;
+                var nearH = (Math.abs(qa[1] - g[1]) < tol || Math.abs(qa[1] - g[3]) < tol) && qa[0] >= g[0] - tol && qa[0] <= g[2] + tol;
+                if (nearV || nearH) return false;
+            }
+        }
+        return nIn >= 1;
+    }
 
     // Artboard bounds để lọc viền khung
     doc.artboards.setActiveArtboardIndex(0);
@@ -136,6 +183,21 @@
         if (pw > abW * 0.85 && ph > abH * 0.85) {
             dimItems.push(pItem);
             continue;
+        }
+
+        // A2. Khung nhóm (CONTAINER_FRAME) — giữ nguyên để plugin đặt tên nhóm theo tiêu đề trong khung
+        if (isContainerFrame(pItem)) {
+            frameItems.push(pItem);
+            continue;
+        }
+
+        // A3. Đường ghi kích thước: đoạn thẳng có text số đo ("37cm"…) nằm sát
+        if (!pItem.closed && pItem.pathPoints.length <= 3 && dimTextPts.length) {
+            var sa = pItem.pathPoints[0].anchor, sb = pItem.pathPoints[pItem.pathPoints.length - 1].anchor, isDimLine = false;
+            for (var dq = 0; dq < dimTextPts.length; dq++) {
+                if (distPtSeg(dimTextPts[dq], sa, sb) <= Math.max(6 * toPT, dimTextPts[dq][2] * 1.6)) { isDimLine = true; break; }
+            }
+            if (isDimLine) { dimItems.push(pItem); continue; }
         }
 
         // B. Đường tràn lề (BLEED) - Màu xanh lá hoặc layer chứa chữ bleed/tran
@@ -266,6 +328,23 @@
         } catch (eD) {}
     }
 
+    // E. KHUNG NHÓM: layer riêng, nét xám mảnh, vẫn hiển thị (plugin dùng để gom nhóm + đặt tên)
+    if (frameItems.length) {
+        var lyrFrame = getOrCreateLayer("KHUNG_NHOM");
+        lyrFrame.locked = false;
+        var colorFrame = makeColor(150, 150, 150, 0, 0, 0, 45);
+        for (var fi = 0; fi < frameItems.length; fi++) {
+            try {
+                frameItems[fi].move(lyrFrame, ElementPlacement.PLACEATBEGINNING);
+                frameItems[fi].stroked = true;
+                frameItems[fi].strokeColor = colorFrame;
+                frameItems[fi].strokeWidth = 0.5;
+                frameItems[fi].strokeDashes = [];
+                frameItems[fi].filled = false;
+            } catch (eF) {}
+        }
+    }
+
     lyrText.visible = false; lyrText.locked = true;
     lyrDims.visible = false; lyrDims.locked = true;
 
@@ -275,7 +354,8 @@
               "  Đường cấn gập (CREASE_FOLD): " + creaseItems.length + " nét (Đỏ nét đứt #ee1e23, 0.5pt)\n" +
               "  Đường tràn lề (BLEED): " + bleedItems.length + " nét (Xanh lá #28b446)\n" +
               "  Văn bản & Chú thích (TEXT): " + textCount + " đối tượng (Đã chuyển sang layer ẩn)\n" +
-              "  Kích thước & Khung viền (DIMS): " + dimItems.length + " nét (Đã chuyển sang layer ẩn)\n\n" +
+              "  Kích thước & Khung viền (DIMS): " + dimItems.length + " nét (Đã chuyển sang layer ẩn)\n" +
+              "  Khung nhóm (KHUNG_NHOM): " + frameItems.length + " khung (giữ nguyên để gom nhóm)\n\n" +
               "Bây giờ bạn có thể mở panel 'Packaging Studio 3D' và bấm 'Quét khuôn AI' để xem mô hình 3D chuẩn xác 100%!";
 
     alert(msg);

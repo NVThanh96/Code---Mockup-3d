@@ -198,20 +198,42 @@
 
     // ── Mô hình hiện tại ───────────────────────────────────────────────────
     var model = null, folder = null, lastFitKey = '';
+    var comboFolders = [];     // các mô hình đang ghép trong chế độ Combo
+    state.combo = null;        // { key, title, items: [{ tpl, params, name }] }
 
-    function rebuild3D(keepCamera) {
-        model = PS3D.build(state.tpl, state.params);
-        var uvRect = PS3D.artboardRect(model, state.bleed);
+    function folderOpts(m) {
+        var uvRect = PS3D.artboardRect(m, state.bleed);
         var matCfg = MATERIALS[state.material] || MATERIALS.kraft;
-
-        if (folder) folder.dispose();
-        folder = new PS3D.Folder(THREE, model, {
+        return {
             paperMap: paperTexture(state.material, uvRect),
             backMap: paperTexture(state.material === 'ivory' ? 'ivory' : 'kraft', uvRect),
             roughness: matCfg.rough,
             metalness: matCfg.metal,
             uvRect: uvRect
-        });
+        };
+    }
+
+    function disposeCombo() {
+        comboFolders.forEach(function (f) { f.dispose(); });
+        comboFolders = [];
+    }
+
+    // Khuôn 2D chuẩn (CUT xanh dương, CREASE đỏ nét đứt) của mẫu đang xem
+    function updatePreview2D(m) {
+        var box = $('dieline-preview2d');
+        if (!box) return;
+        try { box.innerHTML = PS3D.thumbnailSVG(m); } catch (e) { box.innerHTML = ''; }
+    }
+
+    function rebuild3D(keepCamera) {
+        if (state.combo) { buildComboScene(keepCamera); return; }
+        disposeCombo();
+        model = PS3D.build(state.tpl, state.params);
+        var opts = folderOpts(model);
+        var uvRect = opts.uvRect;
+
+        if (folder) folder.dispose();
+        folder = new PS3D.Folder(THREE, model, opts);
         folder.setWireframe(state.wireframe);
 
         if (state.activeDoc && artCache[state.activeDoc] && docMatchesCurrent(state.activeDoc)) {
@@ -220,10 +242,102 @@
         scene.add(folder.root);
         folder.setT(state.sliderVal / 100);
         updateInfo(uvRect);
+        updatePreview2D(model);
 
         var fitKey = state.tpl.id + JSON.stringify(state.params);
         if (!keepCamera && fitKey !== lastFitKey) fitCamera();
         lastFitKey = fitKey;
+    }
+
+    // ── COMBO: ghép nhiều thành phần của 1 nhóm trên cùng màn hình 3D ──────
+    function buildComboScene(keepCamera) {
+        if (folder) { folder.dispose(); folder = null; }
+        disposeCombo();
+        var totalPanels = 0, totalCreases = 0;
+        state.combo.items.forEach(function (it) {
+            var m = PS3D.build(it.tpl, it.params);
+            var f = new PS3D.Folder(THREE, m, folderOpts(m));
+            f.setWireframe(state.wireframe);
+            f.comboModel = m;
+            scene.add(f.root);
+            comboFolders.push(f);
+            totalPanels += m.panels.length;
+            totalCreases += PS3D.dieline(m).creases.length;
+        });
+        model = comboFolders.length ? comboFolders[0].comboModel : null;
+        setComboT(state.sliderVal / 100);
+        $('info-size').textContent = state.combo.items.length + ' thành phần';
+        $('info-ab').textContent = 'Combo';
+        $('info-panels').textContent = totalPanels;
+        $('info-creases').textContent = totalCreases;
+        $('tpl-name-label').textContent = '🧩 ' + state.combo.title;
+        // Bảng kích thước: liệt kê từng thành phần (L × W × H thành phẩm), bấm để mở riêng
+        var pg = $('param-grid');
+        pg.innerHTML = '';
+        state.combo.items.forEach(function (it) {
+            var p = it.params || {};
+            var row = document.createElement('div');
+            row.className = 'dim-box combo-part';
+            row.style.gridColumn = '1 / -1';
+            row.style.cursor = 'pointer';
+            row.title = 'Bấm để xem riêng thành phần này';
+            row.innerHTML = '<span>' + it.name + '</span><b>' + [p.L, p.W, p.H].join(' × ') + ' mm</b>';
+            row.addEventListener('click', function () { selectTemplate(it.tpl.id, it.params); });
+            pg.appendChild(row);
+        });
+        if (model) updatePreview2D(model);
+        if (!keepCamera) fitCamera();
+    }
+
+    // Xếp các thành phần thành 1 hàng, cách nhau 40mm, căn giữa
+    function layoutCombo() {
+        var GAP = 40, boxes = [], total = 0;
+        comboFolders.forEach(function (f) {
+            f.root.position.set(0, 0, 0);
+            f.root.updateMatrixWorld(true);
+            var b = new THREE.Box3().setFromObject(f.root);
+            boxes.push(b);
+            total += (b.max.x - b.min.x);
+        });
+        total += GAP * Math.max(0, comboFolders.length - 1);
+        var x = -total / 2;
+        comboFolders.forEach(function (f, i) {
+            var b = boxes[i];
+            f.root.position.x = x - b.min.x;
+            x += (b.max.x - b.min.x) + GAP;
+        });
+    }
+
+    function setComboT(t) {
+        comboFolders.forEach(function (f) { f.setT(t); });
+        layoutCombo();
+    }
+
+    function comboItemsFor(key) {
+        // Ưu tiên: các mẫu đã quét thuộc cùng 1 khung nhóm (groupId) mới nhất
+        var scanned = PS3D.getTemplates().filter(function (t) { return t.groupId && libGroupOf(t) === key; });
+        var byGroup = {};
+        scanned.forEach(function (t) { (byGroup[t.groupId] = byGroup[t.groupId] || []).push(t); });
+        var best = null;
+        Object.keys(byGroup).forEach(function (g) { if (!best || byGroup[g].length > best.length) best = byGroup[g]; });
+        if (best && best.length >= 2) {
+            return best.map(function (t) { return { tpl: t, params: PS3D.defaultParams(t), name: t.name }; });
+        }
+        return (COMBO_PRESETS[key] || []).map(function (c) {
+            var tpl = PS3D.getTemplate(c.id);
+            return tpl ? { tpl: tpl, params: Object.assign(PS3D.defaultParams(tpl), c.p), name: c.name } : null;
+        }).filter(Boolean);
+    }
+
+    function showCombo(key) {
+        var G = LIB_GROUPS.filter(function (g) { return g.key === key; })[0];
+        var items = comboItemsFor(key);
+        if (!items.length) { setStatus('⚠ Nhóm này chưa có thành phần để ghép combo.', 'error'); return; }
+        state.combo = { key: key, title: G ? G.title : key, items: items };
+        updateActiveCard(null);
+        setSlider(100);
+        rebuild3D(false);
+        setStatus('🧩 Combo "' + state.combo.title + '": ' + items.map(function (i) { return i.name; }).join(' + '));
     }
 
     function docMatchesCurrent(name) {
@@ -232,6 +346,22 @@
     }
 
     function fitCamera() {
+        if (state.combo && comboFolders.length) {
+            var bb = new THREE.Box3();
+            comboFolders.forEach(function (f) { f.root.updateMatrixWorld(true); bb.expandByObject(f.root); });
+            var sz = bb.getSize(new THREE.Vector3());
+            var md = Math.max(sz.x, sz.y, sz.z, 100);
+            var fr = (camera.fov * Math.PI) / 180;
+            var dd = (md * 0.62) / Math.sin(fr / 2);
+            camera.position.set(dd * 0.45, dd * 0.55, dd * 0.95);
+            camera.far = dd * 20;
+            camera.updateProjectionMatrix();
+            controls.target.set(0, sz.y * 0.35, 0);
+            controls.minDistance = md * 0.3;
+            controls.maxDistance = dd * 8;
+            controls.update();
+            return;
+        }
         if (!model) return;
         var p = model.params || {};
         var b = model.bounds || {};
@@ -270,7 +400,8 @@
         state.sliderVal = Math.max(0, Math.min(100, +v));
         $('slider-main-pill').value = state.sliderVal;
         $('slider-lid').value = state.sliderVal;
-        if (folder) folder.setT(state.sliderVal / 100);
+        if (state.combo) setComboT(state.sliderVal / 100);
+        else if (folder) folder.setT(state.sliderVal / 100);
         var lbl = $('lid-val'), t = state.sliderVal / 100;
         lbl.textContent = t >= 0.98 ? 'Đóng' : t <= 0.02 ? 'Trải phẳng' : Math.round(state.sliderVal) + '%';
     }
@@ -349,10 +480,7 @@
         // Cập nhật số lượng checkbox đang chọn
         updateBatchDeleteBtn(filtered);
 
-        if (filtered.length === 0) {
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:15px;color:var(--text-dim)">Không tìm thấy mẫu phù hợp.</div>';
-        } else {
-            filtered.forEach(function (tpl) {
+        var makeCard = function (tpl) {
                 var isSelected = !!selectedTemplateIds[tpl.id];
                 var card = document.createElement('div');
                 card.className = 'tpl-card' + (tpl.id === state.tpl.id ? ' active' : '') + (isSelected ? ' selected' : '');
@@ -440,10 +568,95 @@
                     }
                     selectTemplate(tpl.id);
                 });
-                grid.appendChild(card);
-            });
+                return card;
+        };
+
+        if (filtered.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:15px;color:var(--text-dim)">Không tìm thấy mẫu phù hợp.</div>';
+        } else {
+            renderGroupedSections(grid, filtered, makeCard);
         }
         $('tpl-count').textContent = filtered.length + '/' + templatesList.length + ' mẫu';
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // NHÓM THƯ VIỆN THÔNG MINH (theo CONTAINER_FRAME khi quét) + COMBO 3D
+    // ════════════════════════════════════════════════════════════════════════
+    var LIB_GROUPS = [
+        { key: 'trungthu', icon: '📦', title: 'Bộ hộp bánh trung thu nắp rút', combo: true },
+        { key: 'amduong', icon: '🎁', title: 'Bộ hộp Âm Dương Kèm túi', combo: true },
+        { key: 'fastfood', icon: '🍔', title: 'Combo Đồ ăn nhanh', combo: true },
+        { key: 'bagenv', icon: '🛍️', title: 'Túi giấy & Bì thư' },
+        { key: 'single', icon: '📁', title: 'Hộp đơn tiêu chuẩn' },
+        { key: 'custom', icon: '⭐', title: 'Khuôn tự do / Khác' }
+    ];
+    var BUILTIN_GROUP = {
+        'sleeve-drawer': 'trungthu', 'tray': 'trungthu', 'divider-tray': 'trungthu',
+        'double-wall-tray': 'amduong',
+        'burger-box': 'fastfood', 'fries-box': 'fastfood', 'chicken-bag': 'fastfood',
+        'tote-bag': 'bagenv', 'envelope': 'bagenv',
+        'reverse-tuck': 'single', 'crash-lock': 'single', 'straight-tuck': 'single', 'gable-box': 'single',
+        'rsc-carton': 'single', 'cake-box': 'single', 'mailer-box': 'single'
+    };
+    // Combo mẫu chuẩn (dùng khi chưa quét file nào cho nhóm đó)
+    var COMBO_PRESETS = {
+        amduong: [
+            { id: 'double-wall-tray', name: 'Đáy hộp', p: { L: 370, W: 300, H: 70, T: 15 } },
+            { id: 'double-wall-tray', name: 'Nắp hộp', p: { L: 375, W: 305, H: 40, T: 15 } },
+            { id: 'tote-bag', name: 'Túi giấy', p: { L: 385, W: 80, H: 315, G: 15 } }
+        ],
+        trungthu: [
+            { id: 'sleeve-drawer', name: 'Vỏ hộp mẹ', p: { L: 320, W: 255, H: 75 } },
+            { id: 'tray', name: 'Khay đáy hộp mẹ', p: { L: 315, W: 250, H: 72 } },
+            { id: 'divider-tray', name: 'Khay định hình 4 ô', p: { L: 305, W: 240, H: 45 } },
+            { id: 'reverse-tuck', name: 'Hộp con', p: { L: 85, W: 85, H: 55 } },
+            { id: 'reverse-tuck', name: 'Hộp trà', p: { L: 75, W: 75, H: 140 } }
+        ],
+        fastfood: [
+            { id: 'mailer-box', name: 'Hộp đựng gà rán', p: { L: 200, W: 120, H: 70 } },
+            { id: 'chicken-bag', name: 'Túi đựng gà rán', p: { L: 200, W: 100, H: 300 } },
+            { id: 'mailer-box', name: 'Hộp gà vuông nắp gập', p: { L: 130, W: 130, H: 60 } },
+            { id: 'burger-box', name: 'Hộp bánh Hamburger', p: { L: 95, W: 95, H: 70 } }
+        ]
+    };
+    var collapsedGroups = {};
+    try { collapsedGroups = JSON.parse(localStorage.getItem('ps3d_collapsed_groups') || '{}'); } catch (eCg) {}
+
+    function libGroupOf(tpl) {
+        if (tpl.libGroup) return tpl.libGroup;
+        if (BUILTIN_GROUP[tpl.id]) return BUILTIN_GROUP[tpl.id];
+        var g = (tpl.group || '').toLowerCase();
+        if (g.indexOf('âm dương') !== -1) return 'amduong';
+        if (g.indexOf('trung thu') !== -1 || g.indexOf('nắp rút') !== -1) return 'trungthu';
+        if (g.indexOf('ăn nhanh') !== -1 || g.indexOf('burger') !== -1 || g.indexOf('gà rán') !== -1) return 'fastfood';
+        if (g.indexOf('túi') !== -1 || g.indexOf('bì thư') !== -1) return 'bagenv';
+        if (tpl.baseTemplateId && BUILTIN_GROUP[tpl.baseTemplateId]) return BUILTIN_GROUP[tpl.baseTemplateId];
+        return 'custom';
+    }
+
+    function renderGroupedSections(grid, list, makeCard) {
+        LIB_GROUPS.forEach(function (G) {
+            var items = list.filter(function (t) { return libGroupOf(t) === G.key; });
+            if (!items.length) return;
+            var collapsed = !!collapsedGroups[G.key];
+            var head = document.createElement('div');
+            head.className = 'lib-group-head' + (collapsed ? ' collapsed' : '');
+            head.innerHTML = '<span class="lg-caret">' + (collapsed ? '▶' : '▼') + '</span>' +
+                '<span class="lg-title">' + G.icon + ' Nhóm: ' + G.title + '</span>' +
+                '<span class="lg-count">' + items.length + '</span>' +
+                (G.combo ? '<button class="lg-combo" title="Ghép tất cả thành phần của nhóm trên cùng 1 màn hình 3D">🧩 Xem 3D Toàn Bộ Combo</button>' : '');
+            head.addEventListener('click', function (e) {
+                if (e.target.classList.contains('lg-combo')) return;
+                collapsedGroups[G.key] = !collapsedGroups[G.key];
+                try { localStorage.setItem('ps3d_collapsed_groups', JSON.stringify(collapsedGroups)); } catch (eS) {}
+                renderLibrary();
+            });
+            var btnCombo = head.querySelector('.lg-combo');
+            if (btnCombo) btnCombo.addEventListener('click', function (e) { e.stopPropagation(); showCombo(G.key); });
+            grid.appendChild(head);
+            if (collapsed) return;
+            items.forEach(function (tpl) { grid.appendChild(makeCard(tpl)); });
+        });
     }
 
     function updateBatchDeleteBtn(filteredList) {
@@ -697,53 +910,92 @@
                     return;
                 }
 
-                // Đăng ký các mẫu hộp được phân tích vào thư viện VÀ LƯU VĨNH VIỄN
-                boxes.forEach(function (box, idx) {
-                    var modelObj = PS3D.buildFromDieline(box);
-                    modelObj.template.isCustom = true;
-                    modelObj.template.group = box.group || 'Khuôn đã lưu';
-                    PS3D.registerTemplate(modelObj.template);
-                    PS3D.saveTemplateToStorage(modelObj.template);
+                // Xóa các mẫu đã quét trước đó từ CÙNG file → không bị nhân bản (46–47 mẫu rác)
+                PS3D.getTemplates().forEach(function (t) {
+                    var legacyScan = t.isCustom && !t.sourceDoc && /^custom-scanned-/.test(t.id);
+                    if ((t.isCustom && t.sourceDoc && t.sourceDoc === res.docName) || legacyScan) {
+                        PS3D.removeTemplate(t.id);
+                        PS3D.removeTemplateFromStorage(t.id);
+                    }
                 });
 
-                // Cập nhật lại giao diện thư viện với các mẫu mới vừa lưu
+                // Đăng ký: khuôn nhận diện được loại + DRC → dựng lại khuôn 2D chuẩn bằng bộ sinh tham số
+                var builtModels = [];
+                boxes.forEach(function (box) {
+                    box.sourceDoc = res.docName;
+                    var modelObj = PS3D.buildFromDieline(box);
+                    var tplB = modelObj.template;
+                    tplB.isCustom = true;
+                    tplB.group = box.group || tplB.group || 'Khuôn đã lưu';
+                    tplB.libGroup = box.libGroup || tplB.libGroup || null;
+                    tplB.groupId = box.groupId || null;
+                    tplB.comboTitle = box.comboTitle || null;
+                    tplB.sourceDoc = res.docName;
+                    PS3D.registerTemplate(tplB);
+                    PS3D.saveTemplateToStorage(tplB);
+                    builtModels.push({ box: box, model: modelObj });
+                });
+
                 renderLibrary();
 
-                // Dựng 3D cho hộp đầu tiên
-                var activeBoxData = boxes[0];
-                var scannedModel = PS3D.buildFromDieline(activeBoxData);
-                model = scannedModel;
-                state.tpl = scannedModel.template;
-                state.params = scannedModel.params;
-
-                var uvRect = PS3D.artboardRect(model, state.bleed);
-                var matCfg = MATERIALS[state.material] || MATERIALS.kraft;
-
-                if (folder) folder.dispose();
-                folder = new PS3D.Folder(THREE, model, {
-                    paperMap: paperTexture(state.material, uvRect),
-                    backMap: paperTexture('kraft', uvRect),
-                    roughness: matCfg.rough,
-                    metalness: matCfg.metal,
-                    uvRect: uvRect
-                });
-                scene.add(folder.root);
-                setSlider(100);
-
-                updateInfo(uvRect);
-                fitCamera();
+                // Dựng 3D cho hộp đầu tiên (đã chuẩn hóa)
+                state.combo = null;
+                var first = builtModels[0];
+                state.tpl = first.model.template;
+                state.params = first.model.params || PS3D.defaultParams(state.tpl);
+                updateActiveCard(state.tpl.id);
                 renderParams();
+                setSlider(100);
+                rebuild3D(false);
 
-                if (boxes.length === 1) {
-                    setStatus('✓ Đã quét 1 hộp: "' + activeBoxData.name + '" (' + activeBoxData.width.toFixed(0) + '×' + activeBoxData.height.toFixed(0) + 'mm). Đã lưu vĩnh viễn vào thư viện!');
-                } else {
-                    setStatus('✓ Đã bóc tách ' + boxes.length + ' mẫu hộp và LƯU VĨNH VIỄN vào thư viện! Đang xem: "' + activeBoxData.name + '".');
+                var nClean = builtModels.filter(function (b) { return b.model.rebuiltFromScan; }).length;
+                var st = res.stats || {};
+                setStatus('✓ Đã bóc tách ' + boxes.length + ' mẫu (' + nClean + ' khuôn chuẩn hóa tham số) · ' +
+                    (st.frames || 0) + ' khung nhóm · bỏ ' + (st.annotationLines || 0) + ' đường kích thước · loại ' +
+                    (st.droppedParts || 0) + ' mảnh phụ/rác. Đang xem: "' + first.box.name + '".');
+
+                // Tự động vẽ lại khuôn 2D chuẩn kỹ thuật sang artboard mới
+                var chkAuto = $('chk-auto-rebuild2d');
+                if (chkAuto && chkAuto.checked && nClean > 0) {
+                    drawCleanDielines(builtModels.filter(function (b) { return b.model.rebuiltFromScan; })
+                        .map(function (b) { return b.model; }));
                 }
             } catch (errBuild) {
                 console.error('Lỗi buildFromDieline:', errBuild);
                 setStatus('⚠ Lỗi phân tích khuôn: ' + errBuild.message, 'error');
             }
         });
+    });
+
+    // ── Vẽ lại khuôn 2D chuẩn (CUT xanh / CREASE đỏ / BLEED xanh lá) sang ARTBOARD MỚI ──
+    function cleanItemFor(m) {
+        var dl = PS3D.dieline(m), p = m.params || {};
+        return {
+            name: m.template.name,
+            drcText: (p.L && p.W && p.H) ? ('DRC: ' + p.L + ' × ' + p.W + ' × ' + p.H + ' mm') : '',
+            rect: { x0: m.bounds.minX, y0: m.bounds.minY, w: m.bounds.w, h: m.bounds.h },
+            cuts: dl.cuts,
+            creases: dl.creases,
+            panels: m.panels.map(function (pn) { return pn.poly; })
+        };
+    }
+    function drawCleanDielines(models) {
+        if (!cs) { setStatus('Cần mở panel trong Illustrator để vẽ khuôn.', 'error'); return; }
+        var payload = { bleed: state.bleed, items: models.map(cleanItemFor) };
+        setStatus('Đang vẽ ' + payload.items.length + ' khuôn chuẩn hóa 2D sang artboard mới…', 'loading');
+        callHost('ps3d_drawCleanDielines', payload, function (r) {
+            if (r && r.ok) {
+                setStatus('✓ Đã vẽ ' + r.artboards + ' khuôn 2D chuẩn kỹ thuật vào layer "' + r.layer + '" (artboard mới)' +
+                    (r.bleedFail ? ' · ' + r.bleedFail + ' khuôn không tạo được bleed tự động' : '') + '.');
+            } else {
+                setStatus('⚠ Vẽ khuôn chuẩn hóa lỗi: ' + (r && r.msg), 'error');
+            }
+        });
+    }
+    var btnClean = $('btn-rebuild-2d');
+    if (btnClean) btnClean.addEventListener('click', function () {
+        if (state.combo) drawCleanDielines(comboFolders.map(function (f) { return f.comboModel; }));
+        else if (model) drawCleanDielines([model]);
     });
 
     function updateActiveCard(activeId) {
@@ -762,6 +1014,7 @@
     function selectTemplate(id, params) {
         var tpl = PS3D.getTemplate(id);
         if (!tpl) { setStatus('⚠ Không có mẫu "' + id + '" trong thư viện máy này.', 'error'); return false; }
+        state.combo = null;
         state.tpl = tpl;
         state.params = params ? Object.assign(PS3D.defaultParams(tpl), params) : PS3D.defaultParams(tpl);
         updateActiveCard(tpl.id);
@@ -1085,6 +1338,7 @@
         state.wireframe = !state.wireframe;
         this.style.background = state.wireframe ? 'rgba(76,155,232,0.7)' : '';
         if (folder) folder.setWireframe(state.wireframe);
+        comboFolders.forEach(function (f) { f.setWireframe(state.wireframe); });
     });
 
     // ════════════════════════════════════════════════════════════════════════

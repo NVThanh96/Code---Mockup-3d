@@ -45,6 +45,40 @@
         return p;
     };
 
+    // ── Ánh xạ loại cấu trúc hộp (boxType / templateType) → id mẫu tham số ──
+    var TYPE_ALIASES = {
+        'burger-box': 'burger-box', 'burger_box': 'burger-box', 'clamshell': 'burger-box',
+        'double-wall-tray': 'double-wall-tray', 'double_wall_tray': 'double-wall-tray', 'am-duong': 'double-wall-tray',
+        'gable-box': 'gable-box', 'gable_box': 'gable-box',
+        'fries-box': 'fries-box', 'fries_box': 'fries-box',
+        'chicken-bag': 'chicken-bag', 'chicken_bag': 'chicken-bag',
+        'cake-box': 'cake-box', 'cake_box': 'cake-box',
+        'sleeve-drawer': 'sleeve-drawer', 'sleeve_drawer': 'sleeve-drawer',
+        'divider-tray': 'divider-tray', 'divider_tray': 'divider-tray',
+        'tote-bag': 'tote-bag', 'tote_bag': 'tote-bag',
+        'envelope': 'envelope',
+        'rsc-carton': 'rsc-carton', 'rsc_carton': 'rsc-carton',
+        'straight-tuck': 'straight-tuck', 'straight_tuck': 'straight-tuck',
+        'reverse-tuck': 'reverse-tuck', 'reverse_tuck': 'reverse-tuck',
+        'crash-lock': 'crash-lock', 'crash_lock': 'crash-lock',
+        'mailer-box': 'mailer-box', 'mailer_box': 'mailer-box',
+        'tray': 'tray'
+    };
+    PS3D.resolveTemplateId = function (type) {
+        if (!type) return null;
+        var id = TYPE_ALIASES[String(type).toLowerCase()] || null;
+        return (id && PS3D.getTemplate(id)) ? id : null;
+    };
+
+    /** Danh sách params của mẫu gốc, giá trị mặc định lấy theo DRC thành phẩm (L × W × H, mm) */
+    PS3D.paramsFromDRC = function (tpl, drc) {
+        drc = drc || {};
+        return (tpl && tpl.params || []).map(function (d) {
+            var v = (drc[d.key] !== undefined && isFinite(drc[d.key]) && drc[d.key] > 0) ? Math.round(drc[d.key] * 10) / 10 : d.def;
+            return { key: d.key, label: d.label, def: v };
+        });
+    };
+
     // ── Persistent Storage System (Lưu trữ vĩnh viễn trên ổ cứng & localStorage) ──
     var storageFilePath = null;
     var nodeFS = null;
@@ -117,6 +151,11 @@
             customPanels: tpl.customPanels || null,
             width: tpl.width || (tpl.drc ? tpl.drc.L : 200),
             height: tpl.height || (tpl.drc ? tpl.drc.H : 200),
+            libGroup: tpl.libGroup || null,
+            groupId: tpl.groupId || null,
+            comboTitle: tpl.comboTitle || null,
+            sourceDoc: tpl.sourceDoc || null,
+            rebuiltFromScan: !!tpl.rebuiltFromScan,
             savedAt: Date.now()
         };
 
@@ -140,6 +179,16 @@
 
     PS3D.registerSavedTemplate = function (data) {
         if (!data || !data.id) return null;
+
+        // Khuôn quét đã nhận diện được loại cấu trúc + DRC → luôn dựng lại bằng bộ sinh tham số chuẩn
+        var resolvedBase = PS3D.resolveTemplateId(data.baseTemplateId || data.boxType);
+        if (!data.keepRawScan && resolvedBase && data.drc && data.drc.L && data.drc.W && data.drc.H) {
+            data.baseTemplateId = resolvedBase;
+            data.scannedCuts = null;
+            data.scannedCreases = null;
+            data.customPanels = null;
+            data.params = PS3D.paramsFromDRC(PS3D.getTemplate(resolvedBase), data.drc);
+        }
 
         var tplId = data.id;
         var tplName = data.name || 'Mẫu khuôn đã lưu';
@@ -249,6 +298,11 @@
             scannedCreases: creases,
             customPanels: data.customPanels,
             extras: extras,
+            libGroup: data.libGroup || null,
+            groupId: data.groupId || null,
+            comboTitle: data.comboTitle || null,
+            sourceDoc: data.sourceDoc || null,
+            rebuiltFromScan: !!data.rebuiltFromScan,
             params: (function () {
                 var pList = (savedParams.length > 0) ? savedParams.slice() : [
                     { key: 'L', label: 'Dài (L)', def: drc.L || 100 },
@@ -429,16 +483,38 @@
         function key(pt) { return pt[0].toFixed(2) + ',' + pt[1].toFixed(2); }
 
         var count = {}, edges = [];
+        // Điểm mút của mọi bản lề — dùng để tách cạnh khi bản lề con ngắn hơn cạnh cha (vd lưỡi gài)
+        var hingePts = [];
+        hinges.forEach(function (h) { hingePts.push(h[0], h[1]); });
+        function splitEdge(a, b) {
+            var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+            var ts = [];
+            hingePts.forEach(function (q) {
+                if (!onSeg(q, [a, b])) return;
+                var t = ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2;
+                if (t > 1e-4 && t < 1 - 1e-4) ts.push(t);
+            });
+            ts.sort(function (x, y) { return x - y; });
+            var pts = [a];
+            ts.forEach(function (t) { pts.push([a[0] + dx * t, a[1] + dy * t]); });
+            pts.push(b);
+            var segs = [];
+            for (var s = 0; s < pts.length - 1; s++) segs.push([pts[s], pts[s + 1]]);
+            return segs;
+        }
         model.panels.forEach(function (pn) {
             var poly = pn.poly, n = poly.length;
             for (var i = 0; i < n; i++) {
-                var a = poly[i], b = poly[(i + 1) % n];
-                if (Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6) continue;
-                var crease = hinges.some(function (h) { return onSeg(a, h) && onSeg(b, h); });
-                if (crease) continue;
-                var ek = [key(a), key(b)].sort().join('|');
-                count[ek] = (count[ek] || 0) + 1;
-                edges.push({ a: a, b: b, k: ek });
+                var a0 = poly[i], b0 = poly[(i + 1) % n];
+                if (Math.abs(a0[0] - b0[0]) < 1e-6 && Math.abs(a0[1] - b0[1]) < 1e-6) continue;
+                splitEdge(a0, b0).forEach(function (sg) {
+                    var a = sg[0], b = sg[1];
+                    var crease = hinges.some(function (h) { return onSeg(a, h) && onSeg(b, h); });
+                    if (crease) return;
+                    var ek = [key(a), key(b)].sort().join('|');
+                    count[ek] = (count[ek] || 0) + 1;
+                    edges.push({ a: a, b: b, k: ek });
+                });
             }
         });
         // Cạnh trùng giữa 2 mặt (không phải bản lề) là cạnh trong → bỏ
@@ -475,6 +551,10 @@
             if (closed) pts.pop();
             cuts.push({ pts: pts, closed: closed });
         }
+        // Lỗ khoét bên trong (cửa sổ, ô khay, lỗ quai) cũng là đường CẮT khép kín
+        model.panels.forEach(function (pn) {
+            (pn.holes || []).forEach(function (h) { cuts.push({ pts: h, closed: true, hole: true }); });
+        });
         return { cuts: cuts, creases: hinges };
     };
 
@@ -956,13 +1036,40 @@
         };
     };
 
-    // ── Tạo model 3D từ dữ liệu khuôn bế vector (Hướng A - Thuật toán Planar Graph thực tế) ───
+    // ── Tạo model 3D từ dữ liệu khuôn bế vector ───────────────────────────────
+    // Ưu tiên 1 (Auto-Rebuild Clean 2D): đã nhận diện được loại cấu trúc + DRC thành phẩm
+    //   → vẽ lại khuôn 2D chuẩn kỹ thuật bằng bộ sinh tham số và dựng 3D từ chính khuôn đó.
+    // Ưu tiên 2: không nhận diện được → bóc tách đồ thị phẳng (Planar Graph) từ nét vector gốc.
     PS3D.buildFromDieline = function (dielineData) {
+        var baseId = !dielineData.keepRawScan && PS3D.resolveTemplateId(dielineData.templateType || dielineData.boxType);
+        var drcIn = dielineData.drc;
+        if (baseId && drcIn && drcIn.L > 0 && drcIn.W > 0 && drcIn.H > 0) {
+            var baseTpl = PS3D.getTemplate(baseId);
+            var savedTpl = PS3D.registerSavedTemplate({
+                id: 'custom-scanned-' + (dielineData.uid || dielineData.id || Date.now()),
+                name: dielineData.name || baseTpl.name,
+                nameEn: baseTpl.nameEn,
+                group: dielineData.group || baseTpl.group || 'Khuôn đã lưu',
+                boxType: baseId,
+                baseTemplateId: baseId,
+                drc: { L: drcIn.L, W: drcIn.W, H: drcIn.H },
+                libGroup: dielineData.libGroup || null,
+                groupId: dielineData.groupId || null,
+                comboTitle: dielineData.comboTitle || null,
+                sourceDoc: dielineData.sourceDoc || null,
+                rebuiltFromScan: true,
+                width: dielineData.width, height: dielineData.height
+            });
+            var mdl = PS3D.build(savedTpl, PS3D.defaultParams(savedTpl));
+            mdl.rebuiltFromScan = true;
+            return mdl;
+        }
+
         var cuts = dielineData.cuts || [];
         var creases = dielineData.creases || [];
         var w = dielineData.width || 200, h = dielineData.height || 200;
 
-        // Sinh lưới 3D trực tiếp từ dữ liệu vector thực tế, không dùng template cố định
+        // Sinh lưới 3D trực tiếp từ dữ liệu vector thực tế (không nhận diện được loại hộp)
         var part = PS3D.partitionDielineIntoPanels(cuts, creases, w, h);
         var panels = part.panels;
         var detectedCreases = part.creases;
@@ -1014,8 +1121,8 @@
             width: w,
             height: h,
             params: [
-                { key: 'W_TOTAL', label: 'Rộng (W)', def: Math.round(w) },
-                { key: 'H_TOTAL', label: 'Cao (H)', def: Math.round(h) }
+                { key: 'W_TOTAL', label: 'Khổ trải ngang', def: Math.round(w) },
+                { key: 'H_TOTAL', label: 'Khổ trải dọc', def: Math.round(h) }
             ],
             build: function (p) {
                 return {

@@ -640,739 +640,728 @@ function ps3d_exportArtwork() {
     } catch (e) { return _ps3dErr(e); }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Quét khuôn bế tự do từ Illustrator (Hướng A: Scan Dieline Vector → 3D)
-// ────────────────────────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════════════════
+// PAGE LAYOUT ANALYZER — Quét file khuôn tổng hợp (vd "Tất cả bộ khuôn hộp plus.pdf")
+//   Bước 1: Tìm KHUNG NHÓM (CONTAINER_FRAME) — hình chữ nhật bao ngoài, không chạm nét khuôn,
+//           chứa khuôn + tiêu đề. Khung KHÔNG bao giờ thành mặt phẳng 3D hay mẫu hộp.
+//   Bước 2: Gom cụm khuôn, gộp lỗ khoét vào khuôn mẹ, loại mảnh phụ / mẫu rác (faceCount < 4).
+//   Bước 3: Loại đường ghi kích thước (ANNOTATION_LINE) cạnh text "37cm", "30cm"…
+//   Bước 4: Đặt tên nhóm / tên mẫu từ tiêu đề trong khung, nhận diện loại cấu trúc + DRC (L×W×H mm).
+// ════════════════════════════════════════════════════════════════════════════
+var PS3D_CLEAN_LAYER = 'KHUON CHUAN HOA 2D';
+
+// Bỏ dấu tiếng Việt + chữ thường → so khớp từ khóa ASCII (bền với PDF lưu dấu tổ hợp)
+function _ps3dFold(s) {
+    s = String(s || '').toLowerCase();
+    var groups = [
+        ['a', '\u00e0\u00e1\u1ea1\u1ea3\u00e3\u00e2\u1ea7\u1ea5\u1ead\u1ea9\u1eab\u0103\u1eb1\u1eaf\u1eb7\u1eb3\u1eb5'],
+        ['e', '\u00e8\u00e9\u1eb9\u1ebb\u1ebd\u00ea\u1ec1\u1ebf\u1ec7\u1ec3\u1ec5'],
+        ['i', '\u00ec\u00ed\u1ecb\u1ec9\u0129'],
+        ['o', '\u00f2\u00f3\u1ecd\u1ecf\u00f5\u00f4\u1ed3\u1ed1\u1ed9\u1ed5\u1ed7\u01a1\u1edd\u1edb\u1ee3\u1edf\u1ee1'],
+        ['u', '\u00f9\u00fa\u1ee5\u1ee7\u0169\u01b0\u1eeb\u1ee9\u1ef1\u1eed\u1eef'],
+        ['y', '\u1ef3\u00fd\u1ef5\u1ef7\u1ef9'],
+        ['d', '\u0111\u0110']
+    ];
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+        var ch = s.charAt(i), code = s.charCodeAt(i);
+        if (code >= 0x0300 && code <= 0x036f) continue; // dấu tổ hợp
+        var rep = ch;
+        for (var g = 0; g < groups.length; g++) {
+            if (groups[g][1].indexOf(ch) !== -1) { rep = groups[g][0]; break; }
+        }
+        out += rep;
+    }
+    return ' ' + out.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ') + ' ';
+}
+function _ps3dHas(f, keys) {
+    for (var i = 0; i < keys.length; i++) if (f.indexOf(keys[i]) !== -1) return true;
+    return false;
+}
+
+// DRC "9.5x9.5x7cm", "37*7*30", "14 x 14 x 17 cm" → { a, b, c } mm (giữ thứ tự viết)
+function _ps3dParseDRC(str) {
+    if (!str) return null;
+    var rx = /([0-9]+(?:[.,][0-9]+)?)\s*(?:cm|mm)?\s*[x\u00d7\*X]\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:cm|mm)?\s*[x\u00d7\*X]\s*([0-9]+(?:[.,][0-9]+)?)\s*(cm|mm|m)?/i;
+    var m = String(str).match(rx);
+    if (!m) return null;
+    var a = parseFloat(m[1].replace(',', '.')), b = parseFloat(m[2].replace(',', '.')), c = parseFloat(m[3].replace(',', '.'));
+    var unit = (m[4] || '').toLowerCase();
+    if (!unit) {
+        var low = String(str).toLowerCase();
+        if (low.indexOf('mm') !== -1) unit = 'mm';
+        else if (low.indexOf('cm') !== -1) unit = 'cm';
+    }
+    var k = unit === 'mm' ? 1 : (unit === 'cm' ? 10 : ((a <= 80 && b <= 80 && c <= 80) ? 10 : 1));
+    return { a: a * k, b: b * k, c: c * k };
+}
+// "12x22" (bì thư) → { a, b } mm
+function _ps3dParse2D(str) {
+    var m = String(str || '').match(/([0-9]+(?:[.,][0-9]+)?)\s*[x\u00d7\*X]\s*([0-9]+(?:[.,][0-9]+)?)/);
+    if (!m) return null;
+    var a = parseFloat(m[1].replace(',', '.')), b = parseFloat(m[2].replace(',', '.'));
+    var k = (a <= 80 && b <= 80) ? 10 : 1;
+    return { a: a * k, b: b * k };
+}
+
+// Kích thước mặc định (mm) theo loại khi file không ghi DRC
+var PS3D_TYPE_DEFAULTS = {
+    'burger-box': { L: 95, W: 95, H: 70 }, 'fries-box': { L: 85, W: 50, H: 110 },
+    'chicken-bag': { L: 200, W: 100, H: 300 }, 'mailer-box': { L: 130, W: 130, H: 60 },
+    'double-wall-tray': { L: 370, W: 300, H: 70 }, 'tote-bag': { L: 250, W: 100, H: 300 },
+    'sleeve-drawer': { L: 320, W: 255, H: 75 }, 'tray': { L: 315, W: 250, H: 72 },
+    'divider-tray': { L: 305, W: 240, H: 45 }, 'reverse-tuck': { L: 60, W: 50, H: 100 },
+    'straight-tuck': { L: 60, W: 40, H: 120 }, 'crash-lock': { L: 60, W: 50, H: 100 },
+    'gable-box': { L: 140, W: 90, H: 100 }, 'rsc-carton': { L: 300, W: 200, H: 200 },
+    'cake-box': { L: 260, W: 260, H: 180 }, 'envelope': { L: 220, W: 120, H: 10 }
+};
+
+var PS3D_TYPE_NAMES = {
+    'burger-box': 'H\u1ED9p b\u00E1nh Hamburger', 'fries-box': 'H\u1ED9p \u0111\u1EF1ng khoai t\u00E2y chi\u00EAn',
+    'chicken-bag': 'T\u00FAi \u0111\u1EF1ng g\u00E0 r\u00E1n', 'mailer-box': 'H\u1ED9p g\u00E0 vu\u00F4ng n\u1EAFp g\u1EADp',
+    'double-wall-tray': 'Khay \u00C2m D\u01B0\u01A1ng', 'tote-bag': 'T\u00FAi gi\u1EA5y',
+    'sleeve-drawer': 'V\u1ECF h\u1ED9p m\u1EB9 n\u1EAFp r\u00FAt', 'tray': 'Khay \u0111\u00E1y h\u1ED9p m\u1EB9',
+    'divider-tray': 'Khay \u0111\u1ECBnh h\u00ECnh 4 \u00F4', 'reverse-tuck': 'H\u1ED9p n\u1EAFp g\u00E0i',
+    'straight-tuck': 'H\u1ED9p 2 n\u1EAFp c\u00F9ng chi\u1EC1u', 'crash-lock': 'H\u1ED9p n\u1EAFp g\u00E0i \u0111\u00E1y kh\u00F3a',
+    'gable-box': 'H\u1ED9p ch\u00F3p c\u00F3 quai x\u00E1ch', 'rsc-carton': 'Th\u00F9ng carton',
+    'cake-box': 'H\u1ED9p b\u00E1nh sinh nh\u1EADt', 'envelope': 'B\u00EC th\u01B0'
+};
+
+var PS3D_LIB_GROUPS = {
+    trungthu: 'B\u1ED9 h\u1ED9p b\u00E1nh trung thu n\u1EAFp r\u00FAt',
+    amduong: 'B\u1ED9 h\u1ED9p \u00C2m D\u01B0\u01A1ng K\u00E8m t\u00FAi',
+    fastfood: 'Combo \u0110\u1ED3 \u0103n nhanh',
+    bagenv: 'T\u00FAi gi\u1EA5y & B\u00EC th\u01B0',
+    single: 'H\u1ED9p \u0111\u01A1n ti\u00EAu chu\u1EA9n'
+};
+
+// Nhận diện nhóm + loại cấu trúc từ text (đã fold)
+function _ps3dClassify(fBox, fGroup, info) {
+    var fAll = fBox + fGroup;
+    var lib = 'single';
+    if (_ps3dHas(fAll, ['am duong'])) lib = 'amduong';
+    else if (_ps3dHas(fAll, [' 2 banh', 'hai banh'])) lib = 'single';
+    else if (_ps3dHas(fGroup + fBox, ['nap rut', 'hop me', 'trung thu'])) lib = 'trungthu';
+    else if (_ps3dHas(fAll, ['do an nhanh', 'ga ran', 'burger', 'khoai tay', 'ga vuong'])) lib = 'fastfood';
+    else if (_ps3dHas(fAll, ['bi thu', 'phong bi', 'tui giay'])) lib = 'bagenv';
+
+    var t = null, f = fBox.length > 3 ? fBox : fAll;
+    if (_ps3dHas(f, ['hamburger', 'burger'])) t = 'burger-box';
+    else if (_ps3dHas(f, ['khoai tay'])) t = 'fries-box';
+    else if (_ps3dHas(f, ['bi thu', 'phong bi'])) t = 'envelope';
+    else if (_ps3dHas(f, ['sinh nhat', 'banh kem'])) t = 'cake-box';
+    else if (lib === 'amduong') {
+        t = _ps3dHas(f, ['tui']) ? 'tote-bag' : 'double-wall-tray';
+    } else if (lib === 'fastfood') {
+        if (_ps3dHas(f, ['tui'])) t = 'chicken-bag';
+        else t = 'mailer-box'; // hộp gà rán / hộp gà vuông nắp gập
+    } else if (lib === 'trungthu') {
+        if (_ps3dHas(f, ['dinh hinh', '4 o', 'bon o']) || info.innerCutouts >= 3) t = 'divider-tray';
+        else if (_ps3dHas(f, ['tui'])) t = 'tote-bag';
+        else if (_ps3dHas(f, ['hop tra', ' tra '])) t = 'reverse-tuck';
+        else if (_ps3dHas(f, ['hop con'])) t = 'reverse-tuck';
+        else if (_ps3dHas(f, ['khay', 'day hop'])) t = 'tray';
+        else if (_ps3dHas(f, ['vo ', 'nap rut', 'hop me', 'ong rut'])) t = 'sleeve-drawer';
+        else t = 'reverse-tuck';
+    } else if (_ps3dHas(f, ['tui'])) t = 'tote-bag';
+    else if (_ps3dHas(f, ['quai xach', 'chop'])) t = 'gable-box';
+    else if (_ps3dHas(f, ['thung', 'carton'])) t = 'rsc-carton';
+    else if (_ps3dHas(f, ['day khoa', 'khoa day', 'crash'])) t = 'crash-lock';
+    else if (_ps3dHas(f, ['cung chieu'])) t = 'straight-tuck';
+    else if (_ps3dHas(f, [' 2 banh', 'dep', 'day dan', 'nap gai', ' gai'])) t = 'reverse-tuck';
+    else if (_ps3dHas(f, ['khay'])) t = 'tray';
+    return { lib: lib, type: t };
+}
+
+// Gán DRC (chuỗi viết a×b×c) → L, W, H theo quy ước từng loại
+function _ps3dDRCFor(type, raw, textAll) {
+    if (type === 'envelope') {
+        var e = _ps3dParse2D(textAll);
+        if (e) return { L: Math.max(e.a, e.b), W: Math.min(e.a, e.b), H: 10 };
+        return null;
+    }
+    if (!raw) return null;
+    var v = [raw.a, raw.b, raw.c];
+    if (type === 'double-wall-tray' || type === 'tray' || type === 'divider-tray' || type === 'sleeve-drawer' || type === 'mailer-box') {
+        v.sort(function (x, y) { return y - x; });
+        return { L: v[0], W: v[1], H: v[2] };       // khay: dài > rộng > cao
+    }
+    if (type === 'tote-bag' || type === 'chicken-bag') {
+        var iMin = 0;
+        for (var i = 1; i < 3; i++) if (v[i] < v[iMin]) iMin = i;
+        var rest = [];
+        for (var j = 0; j < 3; j++) if (j !== iMin) rest.push(v[j]);
+        return { L: rest[0], W: v[iMin], H: rest[1] }; // túi: hông (W) mỏng nhất
+    }
+    return { L: v[0], W: v[1], H: v[2] };           // hộp: Dài × Rộng × Cao như ghi trên khuôn
+}
+
 function ps3d_scanDieline() {
     try {
-        if (!app.documents.length) return _ps3dErr('Chưa mở file nào trong Illustrator.');
+        if (!app.documents.length) return _ps3dErr('Ch\u01B0a m\u1EDF file n\u00E0o trong Illustrator.');
         var doc = app.activeDocument;
         var toMM = 25.4 / 72.0;
+        function pt2mm(pt) { return [pt[0] * toMM, pt[1] * toMM]; }
 
-        function pt2mm(pt) {
-            return [pt[0] * toMM, pt[1] * toMM];
-        }
-
-        var cuts = [];
-        var creases = [];
         var allPaths = [];
-
-        // Kiểm tra xem người dùng có chọn cụ thể đối tượng nào trong AI không
         var hasSelection = (doc.selection && doc.selection.length > 0);
-        var targetItems = hasSelection ? doc.selection : null;
 
-        function collectFromItem(item, layerName) {
-            if (!item) return;
-            var t = item.typename;
-            if (t === 'PathItem') {
-                if (!item.pathPoints || item.pathPoints.length < 2) return;
-                var pts = [];
-                var numPts = item.pathPoints.length;
-                var isClosed = item.closed;
-                var segCount = isClosed ? numPts : numPts - 1;
-
-                for (var i = 0; i < segCount; i++) {
-                    var ppCurr = item.pathPoints[i];
-                    var ppNext = item.pathPoints[(i + 1) % numPts];
-
-                    var a0 = ppCurr.anchor;
-                    var r0 = ppCurr.rightDirection;
-                    var l1 = ppNext.leftDirection;
-                    var a1 = ppNext.anchor;
-
-                    pts.push(pt2mm(a0));
-
-                    // Kiểm tra đoạn cong Bézier (handles lệch khỏi anchor)
-                    var dR = Math.abs(r0[0] - a0[0]) + Math.abs(r0[1] - a0[1]);
-                    var dL = Math.abs(l1[0] - a1[0]) + Math.abs(l1[1] - a1[1]);
-
-                    if (dR > 0.4 || dL > 0.4) {
-                        var steps = 6;
-                        for (var st = 1; st < steps; st++) {
-                            var bT = st / steps;
-                            var mt = 1.0 - bT;
-                            var bx = mt * mt * mt * a0[0] + 3 * mt * mt * bT * r0[0] + 3 * mt * bT * bT * l1[0] + bT * bT * bT * a1[0];
-                            var by = mt * mt * mt * a0[1] + 3 * mt * mt * bT * r0[1] + 3 * mt * bT * bT * l1[1] + bT * bT * bT * a1[1];
-                            pts.push(pt2mm([bx, by]));
-                        }
-                    }
-                }
-                if (!isClosed) {
-                    pts.push(pt2mm(item.pathPoints[numPts - 1].anchor));
-                }
-
-                var isCrease = false;
-                var lName = (layerName || '').toLowerCase();
-                var sColor = item.stroked && item.strokeColor;
-
-                // 0. LỌC BỎ HOÀN TOÀN BLEED (MÀU XANH LÁ) VÀ CÁC LAYER KÍCH THƯỚC / CHÚ THÍCH
-                if (lName.indexOf('bleed') !== -1 || lName.indexOf('tran') !== -1 || lName.indexOf('tràn') !== -1) {
-                    return; // Bỏ qua layer Bleed
-                }
-                if (lName.indexOf('dim') !== -1 || lName.indexOf('kich_thuoc') !== -1 ||
-                    lName.indexOf('kích thước') !== -1 || lName.indexOf('annotation') !== -1 ||
-                    lName.indexOf('ghi_chu') !== -1 || lName.indexOf('note') !== -1) {
-                    return; // Bỏ qua layer ghi chú kích thước
-                }
-
-                // Nhận diện màu nét BLEED (Xanh lá chuẩn Pacdora C:75, M:0, Y:100, K:0 hoặc RGB G > 120)
-                if (sColor && sColor.typename === 'CMYKColor') {
-                    if (sColor.cyan > 35 && sColor.yellow > 45 && sColor.magenta < 25) {
-                        return; // Bỏ qua nét Bleed xanh lá CMYK
-                    }
-                } else if (sColor && sColor.typename === 'RGBColor') {
-                    if (sColor.green > 120 && sColor.green > sColor.red * 1.25 && sColor.green > sColor.blue * 1.25) {
-                        return; // Bỏ qua nét Bleed xanh lá RGB
-                    }
-                } else if (sColor && sColor.typename === 'SpotColor') {
-                    var spBleedName = (sColor.spot && sColor.spot.name || '').toLowerCase();
-                    if (spBleedName.indexOf('bleed') !== -1 || spBleedName.indexOf('tran') !== -1 || spBleedName.indexOf('tràn') !== -1) {
-                        return; // Bỏ qua nét Bleed Spot color
-                    }
-                }
-
-                // 1. Nhận diện theo tên Layer (crease, gap, cấn, can, fold...)
-                if (lName.indexOf('crease') !== -1 || lName.indexOf('can') !== -1 ||
-                    lName.indexOf('cấn') !== -1 || lName.indexOf('gap') !== -1 ||
-                    lName.indexOf('gập') !== -1 || lName.indexOf('fold') !== -1) {
-                    isCrease = true;
-                }
-                // 2. Nhận diện theo nét đứt (dashed stroke)
-                else if (item.strokeDashes && item.strokeDashes.length > 0) {
-                    isCrease = true;
-                }
-                // 3. Nhận diện theo màu nét (Màu đỏ / Magenta / Spot Crease)
-                else if (sColor && sColor.typename === 'CMYKColor') {
-                    // Magenta cao hoặc Đỏ (M>40 & Y>40 & C<35) hoặc Hồng/Magenta (M>50 & C<35)
-                    if ((sColor.magenta > 40 && sColor.yellow > 35 && sColor.cyan < 35) || (sColor.magenta > 50 && sColor.cyan < 35)) {
-                        isCrease = true;
-                    }
-                } else if (sColor && sColor.typename === 'RGBColor') {
-                    // Red dominant: R > 150 và R áp đảo G, B
-                    if (sColor.red > 150 && (sColor.red > sColor.green * 1.3) && (sColor.red > sColor.blue * 1.3)) {
-                        isCrease = true;
-                    }
-                } else if (sColor && sColor.typename === 'SpotColor') {
-                    var spName = (sColor.spot && sColor.spot.name || '').toLowerCase();
-                    if (spName.indexOf('crease') !== -1 || spName.indexOf('can') !== -1 ||
-                        spName.indexOf('cấn') !== -1 || spName.indexOf('gap') !== -1 ||
-                        spName.indexOf('gập') !== -1 || spName.indexOf('fold') !== -1 ||
-                        spName.indexOf('red') !== -1) {
-                        isCrease = true;
-                    }
-                }
-
-                var pObj = { pts: pts, closed: item.closed, isCrease: isCrease };
-                if (isCrease) creases.push(pts);
-                else cuts.push({ pts: pts, closed: item.closed });
-                allPaths.push(pObj);
-            } else if (t === 'GroupItem') {
-                for (var g = 0; g < item.pageItems.length; g++) {
-                    collectFromItem(item.pageItems[g], layerName);
-                }
-            } else if (t === 'CompoundPathItem') {
-                for (var c = 0; c < item.pathItems.length; c++) {
-                    collectFromItem(item.pathItems[c], layerName);
-                }
-            }
+        function skipLayerName(n) {
+            var f = _ps3dFold(n);
+            return _ps3dHas(f, ['ps3d_data', 'dims', ' dim ', 'kich thuoc', 'kich_thuoc', 'annotation', 'ghi chu', 'ghi_chu',
+                'bleed', ' tran ', 'tran le', 'khuon chuan hoa']);
         }
-
-        // Nếu có chọn vùng (selection): ưu tiên quét chính xác vùng người dùng chọn
-        if (hasSelection) {
-            for (var si = 0; si < targetItems.length; si++) {
-                collectFromItem(targetItems[si], (targetItems[si].layer ? targetItems[si].layer.name : ''));
-            }
-        } else {
-            // Quét toàn bộ các nét trong tài liệu (trừ layer data/dims)
-            for (var l = 0; l < doc.layers.length; l++) {
-                var lyr = doc.layers[l];
-                var lyrLower = lyr.name.toLowerCase();
-                if (lyrLower.indexOf('ps3d_data') !== -1 || lyrLower.indexOf('dims') !== -1) continue;
-                for (var p = 0; p < lyr.pageItems.length; p++) {
-                    collectFromItem(lyr.pageItems[p], lyr.name);
-                }
-            }
+        function isBleedColor(c) {
+            if (!c) return false;
+            if (c.typename === 'CMYKColor') return c.cyan > 35 && c.yellow > 45 && c.magenta < 25;
+            if (c.typename === 'RGBColor') return c.green > 120 && c.green > c.red * 1.25 && c.green > c.blue * 1.25;
+            if (c.typename === 'SpotColor') return _ps3dHas(_ps3dFold(c.spot && c.spot.name), ['bleed', 'tran']);
+            return false;
         }
-
-        if (allPaths.length === 0) {
-            return _ps3dErr('Không tìm thấy đường vector (Path) nào trong file hoặc vùng chọn để quét khuôn.');
-        }
-
-        // Thu thập text nhãn và thông số kích thước trong tài liệu (toàn bộ doc.textFrames)
-        var docLabels = [];
-        try {
-            for (var tfIdx = 0; tfIdx < doc.textFrames.length; tfIdx++) {
-                var tf = doc.textFrames[tfIdx];
-                if (tf.layer && tf.layer.name.toLowerCase().indexOf('ps3d_data') !== -1) continue;
-                if (tf.contents && tf.contents.length > 0) {
-                    var rawTxt = tf.contents.replace(/[\r\n]+/g, ' ').replace(/^\s+|\s+$/g, '');
-                    if (rawTxt.length > 0) {
-                        var tPos = tf.position; // [left, top]
-                        var tWidth = (tf.width || 0) * toMM;
-                        var tHeight = (tf.height || 0) * toMM;
-                        docLabels.push({
-                            text: rawTxt,
-                            x: tPos[0] * toMM,
-                            y: tPos[1] * toMM,
-                            cx: (tPos[0] * toMM) + (tWidth / 2),
-                            cy: (tPos[1] * toMM) - (tHeight / 2)
-                        });
-                    }
-                }
-            }
-        } catch (errTF) {}
-
-        // Artboard size
-        doc.artboards.setActiveArtboardIndex(0);
-        var abRect = doc.artboards[0].artboardRect;
-        var abW = (abRect[2] - abRect[0]) * toMM;
-        var abH = (abRect[1] - abRect[3]) * toMM;
-
-        // Tính Bounding Box cho từng path
-        for (var pi = 0; pi < allPaths.length; pi++) {
-            var path = allPaths[pi];
-            var pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
-            for (var pk = 0; pk < path.pts.length; pk++) {
-                var px = path.pts[pk][0], py = path.pts[pk][1];
-                if (px < pMinX) pMinX = px; if (px > pMaxX) pMaxX = px;
-                if (py < pMinY) pMinY = py; if (py > pMaxY) pMaxY = py;
-            }
-            path.minX = pMinX; path.minY = pMinY;
-            path.maxX = pMaxX; path.maxY = pMaxY;
-            path.w = pMaxX - pMinX; path.h = pMaxY - pMinY;
-            path.isFrame = false;
-        }
-
-        // LỌC BỎ KHUNG VIỀN SECTION & ĐƯỜNG KẺ PHÂN CÁCH (Không phải khuôn hộp)
-        // Những khung chữ nhật viền bao quanh toàn bộ cụm combo hộp hoặc đường viền trang
-        for (var fi = 0; fi < allPaths.length; fi++) {
-            var pfi = allPaths[fi];
-            // 1. Viền trang artboard
-            if (pfi.w > abW * 0.75 && pfi.h > abH * 0.75) {
-                pfi.isFrame = true;
-                continue;
-            }
-            // 2. Khung bao cụm combo (hình chữ nhật chứa nhiều nét khác bên trong với lề trống)
-            if ((pfi.pts.length <= 6 || pfi.closed) && pfi.w > 120 && pfi.h > 80) {
-                var enclosedCount = 0;
-                for (var fj = 0; fj < allPaths.length; fj++) {
-                    if (fi === fj) continue;
-                    var pfj = allPaths[fj];
-                    if (pfj.minX >= pfi.minX + 3 && pfj.maxX <= pfi.maxX - 3 &&
-                        pfj.minY >= pfi.minY + 3 && pfj.maxY <= pfi.maxY - 3) {
-                        enclosedCount++;
-                    }
-                }
-                // Nếu chứa từ 4 đường khác trở lên bên trong: đây là khung section, không phải dieline
-                if (enclosedCount >= 4) {
-                    pfi.isFrame = true;
-                }
-            }
-            // 3. Đường thẳng gióng kích thước / mũi tên / đường phân cách đơn độc
-            // (Open Paths có 2-3 điểm, không khép kín, hoặc có độ dài độc lập không dính vào khuôn chính)
-            if (!pfi.closed && pfi.pts.length <= 4) {
-                var touchesCount = 0;
-                for (var fk = 0; fk < allPaths.length; fk++) {
-                    if (fi === fk) continue;
-                    var pfk = allPaths[fk];
-                    // Kiểm tra nhanh bounding box
-                    if (pfk.maxX + 3.0 < pfi.minX || pfk.minX - 3.0 > pfi.maxX ||
-                        pfk.maxY + 3.0 < pfi.minY || pfk.minY - 3.0 > pfi.maxY) continue;
-
-                    for (var ptIdx = 0; ptIdx < pfi.pts.length; ptIdx++) {
-                        var pPt = pfi.pts[ptIdx];
-                        for (var fkp = 0; fkp < pfk.pts.length; fkp++) {
-                            var q = pfk.pts[fkp];
-                            var d = Math.sqrt((pPt[0]-q[0])*(pPt[0]-q[0]) + (pPt[1]-q[1])*(pPt[1]-q[1]));
-                            if (d < 2.5) { touchesCount++; break; }
-                        }
-                    }
-                }
-                // Nếu là nét đơn lẻ không chạm vào đâu (touchesCount === 0),
-                // hoặc chỉ chạm đúng 1 đầu (đường gióng kích thước / chỉ dẫn), hoặc đường phân cách dài > 150mm
-                if (touchesCount === 0 || (pfi.pts.length === 2 && touchesCount < 2 && (pfi.w > 60 || pfi.h > 60))) {
-                    pfi.isFrame = true;
-                }
-            }
-        }
-
-        // Lấy danh sách các đường hợp lệ thuộc khuôn
-        var validPaths = [];
-        for (var vi = 0; vi < allPaths.length; vi++) {
-            if (!allPaths[vi].isFrame) validPaths.push(allPaths[vi]);
-        }
-
-        // KIỂM TRA ĐỘ TIẾP XÚC GIỮA CÁC ĐƯỜNG (Point-to-Point Touch Connectivity)
-        // Các đường trong CÙNG MỘT HỘP luôn chạm hoặc gặp nhau tại các điểm nút (< 4mm)
-        // Các con hộp KHÁC NHAU trong combo cách nhau ít nhất 15mm-50mm nên không bị dính chùm
-        function pathsConnect(pA, pB, thresh) {
-            // Kiểm tra bounding box trước
-            if (pA.maxX + thresh < pB.minX || pA.minX - thresh > pB.maxX ||
-                pA.maxY + thresh < pB.minY || pA.minY - thresh > pB.maxY) {
-                return false;
-            }
-            var thSq = thresh * thresh;
-            for (var aIdx = 0; aIdx < pA.pts.length; aIdx++) {
-                var pa = pA.pts[aIdx];
-                for (var bIdx = 0; bIdx < pB.pts.length; bIdx++) {
-                    var pb = pB.pts[bIdx];
-                    var dx = pa[0] - pb[0], dy = pa[1] - pb[1];
-                    if (dx * dx + dy * dy <= thSq) return true;
-                }
-            }
+        function isCreaseStyle(item, lName, c) {
+            var f = _ps3dFold(lName);
+            if (_ps3dHas(f, ['crease', ' can ', 'gap', 'fold'])) return true;
+            if (item.strokeDashes && item.strokeDashes.length > 0) return true;
+            if (!c) return false;
+            if (c.typename === 'CMYKColor') return (c.magenta > 40 && c.yellow > 35 && c.cyan < 35) || (c.magenta > 50 && c.cyan < 35);
+            if (c.typename === 'RGBColor') return c.red > 150 && c.red > c.green * 1.3 && c.red > c.blue * 1.3;
+            if (c.typename === 'SpotColor') return _ps3dHas(_ps3dFold(c.spot && c.spot.name), ['crease', ' can', 'fold', 'red', 'gap']);
             return false;
         }
 
-        // Khởi tạo cụm
-        var clusters = [];
-        for (var ci = 0; ci < validPaths.length; ci++) {
-            var vpo = validPaths[ci];
-            clusters.push({
-                minX: vpo.minX, minY: vpo.minY,
-                maxX: vpo.maxX, maxY: vpo.maxY,
-                paths: [vpo]
-            });
-        }
-
-        // Gộp các đường tiếp xúc nhau thành từng mẫu hộp riêng biệt
-        var merged = true;
-        while (merged) {
-            merged = false;
-            for (var i = 0; i < clusters.length; i++) {
-                for (var j = i + 1; j < clusters.length; j++) {
-                    var cA = clusters[i], cB = clusters[j];
-                    if (!(cA.maxX + 4.0 < cB.minX || cA.minX - 4.0 > cB.maxX ||
-                          cA.maxY + 4.0 < cB.minY || cA.minY - 4.0 > cB.maxY)) {
-
-                        var touchFound = false;
-                        for (var ma = 0; ma < cA.paths.length; ma++) {
-                            for (var mb = 0; mb < cB.paths.length; mb++) {
-                                if (pathsConnect(cA.paths[ma], cB.paths[mb], 4.0)) {
-                                    touchFound = true;
-                                    break;
-                                }
-                            }
-                            if (touchFound) break;
-                        }
-
-                        if (touchFound) {
-                            cA.minX = Math.min(cA.minX, cB.minX);
-                            cA.minY = Math.min(cA.minY, cB.minY);
-                            cA.maxX = Math.max(cA.maxX, cB.maxX);
-                            cA.maxY = Math.max(cA.maxY, cB.maxY);
-                            cA.paths = cA.paths.concat(cB.paths);
-                            clusters.splice(j, 1);
-                            merged = true;
-                            break;
+        function collectFromItem(item, layerName) {
+            if (!item) return;
+            try { if (item.hidden || item.guides) return; } catch (eH) {}
+            var t = item.typename;
+            if (t === 'PathItem') {
+                if (!item.pathPoints || item.pathPoints.length < 2) return;
+                var sColor = item.stroked ? item.strokeColor : null;
+                if (isBleedColor(sColor)) return;
+                if (!item.stroked && !item.filled) return;
+                var pts = [], numPts = item.pathPoints.length, isClosed = item.closed;
+                var segCount = isClosed ? numPts : numPts - 1;
+                for (var i = 0; i < segCount; i++) {
+                    var p0 = item.pathPoints[i], p1 = item.pathPoints[(i + 1) % numPts];
+                    var a0 = p0.anchor, r0 = p0.rightDirection, l1 = p1.leftDirection, a1 = p1.anchor;
+                    pts.push(pt2mm(a0));
+                    var dR = Math.abs(r0[0] - a0[0]) + Math.abs(r0[1] - a0[1]);
+                    var dL = Math.abs(l1[0] - a1[0]) + Math.abs(l1[1] - a1[1]);
+                    if (dR > 0.4 || dL > 0.4) {
+                        for (var st = 1; st < 6; st++) {
+                            var bT = st / 6, mt = 1 - bT;
+                            pts.push(pt2mm([
+                                mt * mt * mt * a0[0] + 3 * mt * mt * bT * r0[0] + 3 * mt * bT * bT * l1[0] + bT * bT * bT * a1[0],
+                                mt * mt * mt * a0[1] + 3 * mt * mt * bT * r0[1] + 3 * mt * bT * bT * l1[1] + bT * bT * bT * a1[1]
+                            ]));
                         }
                     }
                 }
-                if (merged) break;
+                if (!isClosed) pts.push(pt2mm(item.pathPoints[numPts - 1].anchor));
+                allPaths.push({ pts: pts, closed: isClosed, anchors: numPts, isCrease: isCreaseStyle(item, layerName, sColor) });
+            } else if (t === 'GroupItem') {
+                for (var g = 0; g < item.pageItems.length; g++) collectFromItem(item.pageItems[g], layerName);
+            } else if (t === 'CompoundPathItem') {
+                for (var c = 0; c < item.pathItems.length; c++) collectFromItem(item.pathItems[c], layerName);
             }
         }
 
-        // THUẬT TOÁN GỘP CỤM NÉT NHỎ / LỖ KHOÉT VÀO KHUÔN CHÍNH (Bounding Box Containment)
-        // Áp dụng cho: Cửa sổ kính (window cutout), ô định hình khay bánh/trà, các lỗ khoét tay cầm...
-        function mergeInnerCutoutsIntoParentDieline(rawClusters) {
-            var tolerance = 3.0; // Dung sai 3pt/mm
+        if (hasSelection) {
+            for (var si = 0; si < doc.selection.length; si++) {
+                var sIt = doc.selection[si];
+                var sLn = sIt.layer ? sIt.layer.name : '';
+                if (!skipLayerName(sLn)) collectFromItem(sIt, sLn);
+            }
+        } else {
+            for (var l = 0; l < doc.layers.length; l++) {
+                var lyr = doc.layers[l];
+                if (!lyr.visible || skipLayerName(lyr.name)) continue;
+                for (var p = 0; p < lyr.pageItems.length; p++) collectFromItem(lyr.pageItems[p], lyr.name);
+            }
+        }
+        if (allPaths.length === 0) return _ps3dErr('Kh\u00F4ng t\u00ECm th\u1EA5y \u0111\u01B0\u1EDDng vector n\u00E0o \u0111\u1EC3 qu\u00E9t khu\u00F4n.');
 
-            // Sắp xếp các cụm theo diện tích Bounding Box từ lớn đến nhỏ
-            rawClusters.sort(function (a, b) {
-                var areaA = (a.maxX - a.minX) * (a.maxY - a.minY);
-                var areaB = (b.maxX - b.minX) * (b.maxY - b.minY);
-                return areaB - areaA;
-            });
-
-            var mergedClusters = [];
-            var absorbedMap = {};
-
-            for (var i = 0; i < rawClusters.length; i++) {
-                if (absorbedMap[i]) continue;
-
-                var parent = rawClusters[i];
-                parent.innerCutouts = parent.innerCutouts || [];
-
-                for (var j = i + 1; j < rawClusters.length; j++) {
-                    if (absorbedMap[j]) continue;
-
-                    var child = rawClusters[j];
-
-                    // Kiểm tra nếu child nằm hoàn toàn bên trong khung bao (Bounding Box) của parent
-                    // Hệ tọa độ chuẩn của Illustrator (minX <= maxX, minY <= maxY)
-                    var isInside =
-                        child.minX >= (parent.minX - tolerance) &&
-                        child.maxX <= (parent.maxX + tolerance) &&
-                        child.minY >= (parent.minY - tolerance) &&
-                        child.maxY <= (parent.maxY + tolerance);
-
-                    if (isInside) {
-                        // Gộp các path của ô nhỏ/lỗ khoét vào khuôn mẹ thay vì tạo mẫu hộp riêng
-                        parent.paths = parent.paths.concat(child.paths);
-                        parent.innerCutouts.push(child);
-                        absorbedMap[j] = true;
-                    }
+        // ── Bounding box + nhận dạng hình chữ nhật ─────────────────────────────
+        var k, q;
+        for (k = 0; k < allPaths.length; k++) {
+            var P0 = allPaths[k], mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+            for (q = 0; q < P0.pts.length; q++) {
+                var px = P0.pts[q][0], py = P0.pts[q][1];
+                if (px < mnX) mnX = px; if (px > mxX) mxX = px;
+                if (py < mnY) mnY = py; if (py > mxY) mxY = py;
+            }
+            P0.minX = mnX; P0.minY = mnY; P0.maxX = mxX; P0.maxY = mxY;
+            P0.w = mxX - mnX; P0.h = mxY - mnY; P0.idx = k;
+            P0.kind = 'DIELINE';
+            var rect = P0.closed && P0.anchors >= 4 && P0.anchors <= 5 && P0.pts.length <= 5;
+            if (rect) {
+                for (q = 0; q < P0.pts.length; q++) {
+                    var onX = Math.abs(P0.pts[q][0] - mnX) < 0.8 || Math.abs(P0.pts[q][0] - mxX) < 0.8;
+                    var onY = Math.abs(P0.pts[q][1] - mnY) < 0.8 || Math.abs(P0.pts[q][1] - mxY) < 0.8;
+                    if (!onX || !onY) { rect = false; break; }
                 }
-
-                mergedClusters.push(parent);
             }
-
-            return mergedClusters;
+            P0.isRect = rect;
         }
 
-        // Thực hiện gộp các lỗ khoét và khay ô con vào khuôn mẹ
-        var consolidatedClusters = mergeInnerCutoutsIntoParentDieline(clusters);
+        // ── Text trong tài liệu ────────────────────────────────────────────────
+        var texts = [];
+        for (var ti = 0; ti < doc.textFrames.length; ti++) {
+            try {
+                var tf = doc.textFrames[ti];
+                if (tf.hidden) continue;
+                if (tf.layer && (_ps3dHas(_ps3dFold(tf.layer.name), ['ps3d_data', 'khuon chuan hoa']))) continue;
+                var raw = String(tf.contents || '').replace(/[\r\n\u0003]+/g, ' ').replace(/^\s+|\s+$/g, '');
+                if (!raw.length) continue;
+                var gbT = tf.geometricBounds; // [left, top, right, bottom] pt
+                var tx0 = gbT[0] * toMM, ty1 = gbT[1] * toMM, tx1 = gbT[2] * toMM, ty0 = gbT[3] * toMM;
+                texts.push({
+                    text: raw, fold: _ps3dFold(raw),
+                    minX: tx0, maxX: tx1, minY: ty0, maxY: ty1,
+                    cx: (tx0 + tx1) / 2, cy: (ty0 + ty1) / 2,
+                    isDim: /^\s*[0-9]+(?:[.,][0-9]+)?\s*(?:cm|mm|m)?\s*$/i.test(raw),
+                    isDRC: !!_ps3dParseDRC(raw)
+                });
+            } catch (eTF) {}
+        }
 
-        // Lọc bỏ rác nhỏ (< 25mm hoặc < 3 đường)
-        var validClusters = [];
-        for (var k = 0; k < consolidatedClusters.length; k++) {
-            var cl = consolidatedClusters[k];
-            var cw = cl.maxX - cl.minX;
-            var ch = cl.maxY - cl.minY;
-            if (cw >= 25 && ch >= 25 && cl.paths.length >= 3) {
-                cl.w = cw;
-                cl.h = ch;
-                validClusters.push(cl);
+        function inside(a, b, tol) { // a nằm trong b
+            return a.minX >= b.minX - tol && a.maxX <= b.maxX + tol && a.minY >= b.minY - tol && a.maxY <= b.maxY + tol;
+        }
+        function ptInBox(x, y, b, tol) { return x >= b.minX - tol && x <= b.maxX + tol && y >= b.minY - tol && y <= b.maxY + tol; }
+
+        // Artboard (để loại khung viền trang)
+        var abR = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
+        var abW = Math.abs(abR[2] - abR[0]) * toMM, abH = Math.abs(abR[1] - abR[3]) * toMM;
+
+        // ════ BƯỚC 1: KHUNG NHÓM (CONTAINER_FRAME) ════════════════════════════
+        var containers = [];
+        for (k = 0; k < allPaths.length; k++) {
+            var F0 = allPaths[k];
+            if (!F0.isRect || F0.w < 40 || F0.h < 30) continue;
+            if (F0.w > abW * 0.92 && F0.h > abH * 0.92) { F0.kind = 'CONTAINER_FRAME'; F0.pageFrame = true; continue; }
+            var nIn = 0, nTouch = 0, nTxt = 0, tol = 1.2;
+            for (var o = 0; o < allPaths.length; o++) {
+                if (o === k) continue;
+                var Q = allPaths[o];
+                if (Q.maxX < F0.minX - tol || Q.minX > F0.maxX + tol || Q.maxY < F0.minY - tol || Q.minY > F0.maxY + tol) continue;
+                if (inside(Q, F0, 0.3) && !(Math.abs(Q.w - F0.w) < 0.5 && Math.abs(Q.h - F0.h) < 0.5)) nIn++;
+                for (q = 0; q < Q.pts.length; q++) {
+                    var vx = Q.pts[q][0], vy = Q.pts[q][1];
+                    var nearV = (Math.abs(vx - F0.minX) < tol || Math.abs(vx - F0.maxX) < tol) && vy > F0.minY - tol && vy < F0.maxY + tol;
+                    var nearH = (Math.abs(vy - F0.minY) < tol || Math.abs(vy - F0.maxY) < tol) && vx > F0.minX - tol && vx < F0.maxX + tol;
+                    if (nearV || nearH) { nTouch++; break; }
+                }
+            }
+            for (var tt = 0; tt < texts.length; tt++) if (ptInBox(texts[tt].cx, texts[tt].cy, F0, 0)) nTxt++;
+            // Khung nhóm: chứa nét khuôn bên trong, có tiêu đề (hoặc rất nhiều nét), và KHÔNG dính vào nét khuôn nào
+            if (nIn >= 1 && nTouch <= 1 && (nTxt >= 1 || nIn >= 6)) {
+                F0.kind = 'CONTAINER_FRAME';
+                containers.push({ minX: F0.minX, minY: F0.minY, maxX: F0.maxX, maxY: F0.maxY, area: F0.w * F0.h, path: F0, children: [], clusters: [] });
+            }
+        }
+        containers.sort(function (a, b) { return b.area - a.area; });
+        for (k = 0; k < containers.length; k++) {
+            containers[k].id = k;
+            containers[k].parent = null;
+            for (var pk = k - 1; pk >= 0; pk--) {          // khung nhỏ nhất (đã xét trước, lớn hơn) chứa nó
+                if (inside(containers[k], containers[pk], 0.5)) {
+                    if (!containers[k].parent || containers[pk].area < containers[k].parent.area) containers[k].parent = containers[pk];
+                }
+            }
+            if (containers[k].parent) containers[k].parent.children.push(containers[k]);
+        }
+        function innermostContainer(b) {
+            var best = null;
+            for (var i = 0; i < containers.length; i++) {
+                if (inside(b, containers[i], 1.0) && (!best || containers[i].area < best.area)) best = containers[i];
+            }
+            return best;
+        }
+        // Tiêu đề khung = text nằm cao nhất bên trong khung, không thuộc khung con, không phải số đo
+        function containerTitle(c) {
+            var best = null;
+            for (var i = 0; i < texts.length; i++) {
+                var T = texts[i];
+                if (T.isDim || !ptInBox(T.cx, T.cy, c, 0)) continue;
+                var inChild = false;
+                for (var j = 0; j < c.children.length; j++) if (ptInBox(T.cx, T.cy, c.children[j], 0)) { inChild = true; break; }
+                if (inChild) continue;
+                if (!best || T.maxY > best.maxY) best = T;
+            }
+            return best;
+        }
+
+        // ════ BƯỚC 3: ĐƯỜNG GHI KÍCH THƯỚC (ANNOTATION_LINE) ══════════════════
+        function distPtSeg(px, py, a, b) {
+            var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+            var t = L2 > 0 ? ((px - a[0]) * dx + (py - a[1]) * dy) / L2 : 0;
+            t = Math.max(0, Math.min(1, t));
+            var ex = a[0] + dx * t - px, ey = a[1] + dy * t - py;
+            return Math.sqrt(ex * ex + ey * ey);
+        }
+        function distPtPath(px, py, P) {
+            var best = Infinity, n = P.pts.length, segs = P.closed ? n : n - 1;
+            for (var i = 0; i < segs; i++) {
+                var d = distPtSeg(px, py, P.pts[i], P.pts[(i + 1) % n]);
+                if (d < best) best = d;
+            }
+            return best;
+        }
+        function endpointTouches(P, pt, tol) {
+            for (var i = 0; i < allPaths.length; i++) {
+                var Q = allPaths[i];
+                if (Q === P || Q.kind !== 'DIELINE') continue;
+                if (pt[0] < Q.minX - tol || pt[0] > Q.maxX + tol || pt[1] < Q.minY - tol || pt[1] > Q.maxY + tol) continue;
+                if (distPtPath(pt[0], pt[1], Q) <= tol) return true;
+            }
+            return false;
+        }
+        var dimTexts = [];
+        for (k = 0; k < texts.length; k++) if (texts[k].isDim) dimTexts.push(texts[k]);
+
+        function nearDimText(P) {
+            var a = P.pts[0], b = P.pts[P.pts.length - 1];
+            for (var i = 0; i < dimTexts.length; i++) {
+                var T = dimTexts[i];
+                var reach = Math.max(6, (T.maxY - T.minY) * 1.6);
+                if (distPtSeg(T.cx, T.cy, a, b) <= reach) return true;
+            }
+            return false;
+        }
+        var annotated = 0;
+        for (k = 0; k < allPaths.length; k++) {
+            var A = allPaths[k];
+            if (A.kind !== 'DIELINE' || A.closed || A.pts.length > 3) continue;
+            var sTouch = endpointTouches(A, A.pts[0], 1.0);
+            var eTouch = endpointTouches(A, A.pts[A.pts.length - 1], 1.0);
+            var dimNear = nearDimText(A);
+            if ((!sTouch && !eTouch) || (dimNear && !(sTouch && eTouch)) || (dimNear && A.isCrease)) {
+                A.kind = 'ANNOTATION_LINE'; annotated++;
+            }
+        }
+        // Vạch chặn / mũi tên nhỏ dính vào đường kích thước
+        for (k = 0; k < allPaths.length; k++) {
+            var Tk = allPaths[k];
+            if (Tk.kind !== 'DIELINE' || Math.max(Tk.w, Tk.h) > 8) continue;
+            for (var an = 0; an < allPaths.length; an++) {
+                var AL = allPaths[an];
+                if (AL.kind !== 'ANNOTATION_LINE') continue;
+                if (distPtPath(Tk.pts[0][0], Tk.pts[0][1], AL) < 1.5 || distPtPath(Tk.pts[Tk.pts.length - 1][0], Tk.pts[Tk.pts.length - 1][1], AL) < 1.5) {
+                    Tk.kind = 'ANNOTATION_LINE'; annotated++; break;
+                }
             }
         }
 
-        // Sắp xếp các cụm khuôn chuẩn từ trái qua phải, trên xuống dưới
-        validClusters.sort(function (a, b) {
-            if (Math.abs(a.minY - b.minY) > 80) return b.minY - a.minY; // từ trên xuống
-            return a.minX - b.minX; // từ trái qua phải
+        // ════ BƯỚC 2a: GOM CỤM NÉT KHUÔN (Union-Find theo tiếp xúc) ══════════
+        var dl = [];
+        for (k = 0; k < allPaths.length; k++) if (allPaths[k].kind === 'DIELINE') dl.push(allPaths[k]);
+        var parentUF = [];
+        for (k = 0; k < dl.length; k++) parentUF[k] = k;
+        function find(i) { while (parentUF[i] !== i) { parentUF[i] = parentUF[parentUF[i]]; i = parentUF[i]; } return i; }
+        function union(i, j) { var a = find(i), b = find(j); if (a !== b) parentUF[b] = a; }
+        var TH = 2.5;
+        function touches(A, B) {
+            var i, j;
+            for (i = 0; i < A.pts.length; i++) {
+                for (j = 0; j < B.pts.length; j++) {
+                    var dx = A.pts[i][0] - B.pts[j][0], dy = A.pts[i][1] - B.pts[j][1];
+                    if (dx * dx + dy * dy <= TH * TH) return true;
+                }
+            }
+            // Chạm chữ T: điểm mút đường hở nằm trên cạnh của đường kia
+            if (!A.closed && (distPtPath(A.pts[0][0], A.pts[0][1], B) <= TH || distPtPath(A.pts[A.pts.length - 1][0], A.pts[A.pts.length - 1][1], B) <= TH)) return true;
+            if (!B.closed && (distPtPath(B.pts[0][0], B.pts[0][1], A) <= TH || distPtPath(B.pts[B.pts.length - 1][0], B.pts[B.pts.length - 1][1], A) <= TH)) return true;
+            return false;
+        }
+        for (var ia = 0; ia < dl.length; ia++) {
+            for (var ib = ia + 1; ib < dl.length; ib++) {
+                var PA = dl[ia], PB = dl[ib];
+                if (PA.maxX + TH < PB.minX || PB.maxX + TH < PA.minX || PA.maxY + TH < PB.minY || PB.maxY + TH < PA.minY) continue;
+                if (find(ia) === find(ib)) continue;
+                if (touches(PA, PB)) union(ia, ib);
+            }
+        }
+        var clMap = {}, clusters = [];
+        for (k = 0; k < dl.length; k++) {
+            var r = find(k);
+            if (!clMap[r]) { clMap[r] = { paths: [], minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, innerCutouts: 0 }; clusters.push(clMap[r]); }
+            var cl = clMap[r], pp = dl[k];
+            cl.paths.push(pp);
+            if (pp.minX < cl.minX) cl.minX = pp.minX; if (pp.maxX > cl.maxX) cl.maxX = pp.maxX;
+            if (pp.minY < cl.minY) cl.minY = pp.minY; if (pp.maxY > cl.maxY) cl.maxY = pp.maxY;
+        }
+        for (k = 0; k < clusters.length; k++) {
+            clusters[k].area = (clusters[k].maxX - clusters[k].minX) * (clusters[k].maxY - clusters[k].minY);
+            clusters[k].container = innermostContainer(clusters[k]);
+        }
+
+        // Gộp cụm nằm lọt lòng (lỗ khoét, cửa sổ, ô khay) vào khuôn mẹ — chỉ trong cùng khung
+        clusters.sort(function (a, b) { return b.area - a.area; });
+        var merged = [];
+        for (k = 0; k < clusters.length; k++) {
+            var C0 = clusters[k];
+            if (C0.absorbed) continue;
+            for (var kk = k + 1; kk < clusters.length; kk++) {
+                var C1 = clusters[kk];
+                if (C1.absorbed || C1.container !== C0.container) continue;
+                if (inside(C1, C0, 2.0)) {
+                    C0.paths = C0.paths.concat(C1.paths);
+                    C0.innerCutouts++;
+                    C1.absorbed = true;
+                }
+            }
+            merged.push(C0);
+        }
+
+        // ════ BƯỚC 2b: LỌC MẢNH PHỤ / MẪU RÁC ══════════════════════════════
+        function stats(C) {
+            var nPts = 0, nCrease = 0, plainRect = true;
+            for (var i = 0; i < C.paths.length; i++) {
+                nPts += C.paths[i].pts.length;
+                if (C.paths[i].isCrease) nCrease++;
+                if (!C.paths[i].isRect) plainRect = false;
+            }
+            C.nPaths = C.paths.length; C.nPts = nPts; C.nCrease = nCrease;
+            C.isPlainRect = plainRect && C.paths.length <= 2;
+            // ước lượng số mặt phẳng: mỗi đường cấn/đường nội bộ tách thêm 1 mặt
+            C.faceEstimate = Math.max(1, C.nPaths - 1 + (nCrease > 0 ? 1 : 0));
+            C.w = C.maxX - C.minX; C.h = C.maxY - C.minY;
+        }
+        for (k = 0; k < merged.length; k++) stats(merged[k]);
+
+        var kept = [], dropped = 0;
+        for (k = 0; k < merged.length; k++) {
+            var M = merged[k];
+            if (M.w < 20 || M.h < 20 || M.area < 600) { dropped++; continue; }
+            // Mảnh lớn nhất cùng khung
+            var mainInFrame = null;
+            for (var mm2 = 0; mm2 < merged.length; mm2++) {
+                var O = merged[mm2];
+                if (O === M || O.container !== M.container || !M.container) continue;
+                if (O.area > M.area && (!mainInFrame || O.area > mainInFrame.area)) mainInFrame = O;
+            }
+            var junk = M.isPlainRect || M.faceEstimate < 4 || M.nPts < 10;
+            var subPart = mainInFrame && (junk || (M.area < mainInFrame.area * 0.2 && M.faceEstimate < 6));
+            if (subPart) { mainInFrame.subParts = (mainInFrame.subParts || 0) + 1; dropped++; continue; }
+            if (junk) {
+                // Giữ lại nếu là khuôn duy nhất trong khung riêng có tiêu đề (vd bì thư 1 nét bao)
+                var own = M.container && M.container.children.length === 0;
+                if (!own) { dropped++; continue; }
+            }
+            kept.push(M);
+            if (M.container) M.container.clusters.push(M);
+        }
+        // Đếm số khuôn trong toàn bộ cây của từng khung
+        function totalClusters(c) {
+            var n = c.clusters.length;
+            for (var i = 0; i < c.children.length; i++) n += totalClusters(c.children[i]);
+            return n;
+        }
+
+        // Thứ tự đọc: trên → dưới, trái → phải
+        kept.sort(function (a, b) {
+            if (Math.abs(a.maxY - b.maxY) > 60) return b.maxY - a.maxY;
+            return a.minX - b.minX;
         });
 
-        // BÓC TÁCH TÊN, COMBO HEADER VÀ THÔNG SỐ DRC CHO TỪNG HỘP
-        var boxesData = [];
+        // ════ BƯỚC 4: ĐẶT TÊN, NHÓM, LOẠI CẤU TRÚC, DRC ═════════════════════
+        var boxes = [];
+        for (var bi = 0; bi < kept.length; bi++) {
+            var B = kept[bi];
+            var box = B.container;
+            // Khung nhóm = khung tổ tiên cao nhất chứa ≥ 2 khuôn (không tính khung trang)
+            var grp = null, walk = box;
+            while (walk) { if (totalClusters(walk) >= 2) grp = walk; walk = walk.parent; }
+            var ownFrame = (box && totalClusters(box) === 1) ? box : null;
 
-        function parseDRC(str) {
-            if (!str) return null;
-            // Tìm dạng DRC: 37x7x30 hoặc 37.5x4x30.5 hoặc 38.5x8x31.5cm
-            var rx = /(?:DRC|KT|Kích thước)?[:\s]*([0-9]+(?:\.[0-9]+)?)\s*[*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s*[*xX×]\s*([0-9]+(?:\.[0-9]+)?)(?:\s*(cm|mm|m))?/i;
-            var m = str.match(rx);
-            if (!m) return null;
-            var v1 = parseFloat(m[1]), v2 = parseFloat(m[2]), v3 = parseFloat(m[3]);
-            var unit = (m[4] || '').toLowerCase();
-            // Nếu có chữ cm hoặc số nhỏ <= 80 thì quy đổi cm ra mm
-            var scale = (unit === 'cm' || (v1 <= 80 && v2 <= 80 && v3 <= 80)) ? 10 : 1;
-            return { d1: v1 * scale, d2: v2 * scale, d3: v3 * scale };
-        }
-
-        for (var bi = 0; bi < validClusters.length; bi++) {
-            var bClust = validClusters[bi];
-            var cCx = (bClust.minX + bClust.maxX) / 2;
-            var cCy = (bClust.minY + bClust.maxY) / 2;
-
-            // 1. Thu thập nhãn text thuộc về cụm khuôn này:
-            // - Nhãn nằm trong lòng khuôn (strictly inside)
-            // - Header nằm ngay trên nắp/khuôn: y >= maxY - 10 và y <= maxY + 95 (Y tăng dần hướng lên trên)
-            // - Caption nằm dưới đáy khuôn: y <= minY + 10 và y >= minY - 70
-            // - Nhãn sát 2 bên mép (margin <= 40mm)
-            var boxLabels = [];
-            for (var li = 0; li < docLabels.length; li++) {
-                var lbl = docLabels[li];
-                var lTxt = lbl.text;
-                var lx = lbl.cx, ly = lbl.cy;
-
-                var isInside = (lx >= bClust.minX - 5 && lx <= bClust.maxX + 5 &&
-                                ly >= bClust.minY - 5 && ly <= bClust.maxY + 5);
-
-                var isHeaderAbove = (ly > bClust.maxY - 10 && ly <= bClust.maxY + 95 &&
-                                     Math.abs(lx - cCx) <= Math.max(bClust.w * 0.65, 80));
-
-                var isCaptionBelow = (ly < bClust.minY + 10 && ly >= bClust.minY - 70 &&
-                                      Math.abs(lx - cCx) <= Math.max(bClust.w * 0.65, 70));
-
-                var isSideNear = (Math.abs(ly - cCy) <= bClust.h * 0.6 &&
-                                  ((lx >= bClust.minX - 40 && lx <= bClust.minX) ||
-                                   (lx >= bClust.maxX && lx <= bClust.maxX + 40)));
-
-                if (isInside || isHeaderAbove || isCaptionBelow || isSideNear) {
-                    // Kiểm tra xem nhãn này có gần một cụm khuôn nào khác hơn không
-                    var isCloserToOther = false;
-                    var myDist = Math.sqrt((lx - cCx) * (lx - cCx) + (ly - cCy) * (ly - cCy));
-                    for (var oi = 0; oi < validClusters.length; oi++) {
-                        if (oi === bi) continue;
-                        var oC = validClusters[oi];
-                        var oCx = (oC.minX + oC.maxX) / 2, oCy = (oC.minY + oC.maxY) / 2;
-                        var oDist = Math.sqrt((lx - oCx) * (lx - oCx) + (ly - oCy) * (ly - oCy));
-                        if (oDist < myDist * 0.85) {
-                            isCloserToOther = true;
-                            break;
-                        }
-                    }
-                    if (!isCloserToOther) {
-                        boxLabels.push(lTxt);
-                    }
-                }
-            }
-
-            // 2. Tìm Combo Title / Section Header (khoảng cách Y từ -40 đến 320mm)
-            var comboTitle = '';
-            var minTitleDist = Infinity;
-            for (var ti = 0; ti < docLabels.length; ti++) {
-                var tLbl = docLabels[ti];
-                var yDist = tLbl.cy - bClust.maxY;
-                var xDist = Math.abs(tLbl.cx - cCx);
-                if (yDist >= -40 && yDist <= 320 && xDist <= (bClust.w / 2 + 300)) {
-                    var txtLow = tLbl.text.toLowerCase();
-                    if (txtLow.indexOf('tất cả') !== -1) continue;
-                    if (txtLow.indexOf('bộ hộp âm dương') !== -1 || txtLow.indexOf('âm dương') !== -1 ||
-                        txtLow.indexOf('hộp bánh trung thu') !== -1 || txtLow.indexOf('bánh trung thu') !== -1 ||
-                        txtLow.indexOf('nắp rút') !== -1 || txtLow.indexOf('đồ ăn nhanh') !== -1 ||
-                        txtLow.indexOf('gà rán & burger') !== -1 || txtLow.indexOf('hộp bánh sinh nhật') !== -1 ||
-                        txtLow.indexOf('bì thư') !== -1 || txtLow.indexOf('thùng carton') !== -1 ||
-                        txtLow.indexOf('nắp gài & đáy dán') !== -1) {
-                        var totDist = Math.sqrt(xDist * xDist + yDist * yDist);
-                        if (totDist < minTitleDist) {
-                            minTitleDist = totDist;
-                            comboTitle = tLbl.text;
+            // Nhãn của khuôn
+            var labels = [];
+            for (var li = 0; li < texts.length; li++) {
+                var Tl = texts[li];
+                var mine = false;
+                if (ownFrame) mine = ptInBox(Tl.cx, Tl.cy, ownFrame, 0);
+                else {
+                    if (box && !ptInBox(Tl.cx, Tl.cy, box, 0)) continue;
+                    var w2 = B.maxX - B.minX;
+                    mine = ptInBox(Tl.cx, Tl.cy, B, 5) ||
+                        (Tl.cy > B.maxY - 5 && Tl.cy < B.maxY + 60 && Tl.cx > B.minX - w2 * 0.15 && Tl.cx < B.maxX + w2 * 0.15) ||
+                        (Tl.cy < B.minY + 5 && Tl.cy > B.minY - 50 && Tl.cx > B.minX - w2 * 0.15 && Tl.cx < B.maxX + w2 * 0.15);
+                    if (mine) { // không gán nếu gần khuôn khác hơn
+                        var bcx = (B.minX + B.maxX) / 2, bcy = (B.minY + B.maxY) / 2;
+                        var dMe = Math.abs(Tl.cx - bcx) + Math.abs(Tl.cy - bcy);
+                        for (var oi = 0; oi < kept.length; oi++) {
+                            var Ko = kept[oi];
+                            if (Ko === B) continue;
+                            if (ptInBox(Tl.cx, Tl.cy, Ko, 2)) { mine = false; break; }
+                            var dO = Math.abs(Tl.cx - (Ko.minX + Ko.maxX) / 2) + Math.abs(Tl.cy - (Ko.minY + Ko.maxY) / 2);
+                            if (dO < dMe * 0.8 && Ko.container === B.container) { mine = false; break; }
                         }
                     }
                 }
+                if (mine && !Tl.isDim) labels.push(Tl);
+            }
+            labels.sort(function (a, b) { return b.maxY - a.maxY; });
+
+            var titleT = ownFrame ? containerTitle(ownFrame) : null;
+            var grpTitleT = grp ? containerTitle(grp) : null;
+            if (!titleT) { for (var lt = 0; lt < labels.length; lt++) { if (!labels[lt].isDRC) { titleT = labels[lt]; break; } } }
+            if (!titleT && labels.length) titleT = labels[0]; // nhãn dạng "Đáy hộp DRC: 37x7x30" → bỏ phần DRC khi đặt tên
+            if (grpTitleT && titleT === grpTitleT) titleT = null;
+
+            var boxText = '';
+            for (var lb = 0; lb < labels.length; lb++) boxText += ' ' + labels[lb].text;
+            var fBox = _ps3dFold((titleT ? titleT.text + ' ' : '') + boxText);
+            var fGrp = grpTitleT ? _ps3dFold(grpTitleT.text) : ' ';
+            var cls = _ps3dClassify(fBox, fGrp, { innerCutouts: B.innerCutouts, w: B.w, h: B.h });
+
+            var rawDRC = _ps3dParseDRC(boxText) || (titleT ? _ps3dParseDRC(titleT.text) : null);
+            var drc = cls.type ? _ps3dDRCFor(cls.type, rawDRC, (titleT ? titleT.text : '') + ' ' + boxText) : null;
+            var drcSource = drc ? 'text' : 'default';
+            if (!drc && cls.type && PS3D_TYPE_DEFAULTS[cls.type]) {
+                var dft = PS3D_TYPE_DEFAULTS[cls.type];
+                drc = { L: dft.L, W: dft.W, H: dft.H };
             }
 
-            // 3. Phân tích văn bản & thông số kích thước DRC
-            var fullInnerText = boxLabels.join(' ');
-            var lowText = fullInnerText.toLowerCase();
-            var drcVals = parseDRC(fullInnerText);
-            var drc = null;
+            var subName = titleT ? titleT.text.replace(/\(?\s*(DRC|KT)?\s*[:\s]*[0-9]+(?:[.,][0-9]+)?\s*[x\u00d7\*X][^)]*\)?/i, '').replace(/^\s+|\s+$/g, '') : '';
+            if (!subName) subName = cls.type ? PS3D_TYPE_NAMES[cls.type] : 'Khu\u00F4n t\u1EF1 do';
+            if (subName.length > 60) subName = subName.substring(0, 60);
+            var finalName = subName + (drc ? ' (' + Math.round(drc.L) + '\u00D7' + Math.round(drc.W) + '\u00D7' + Math.round(drc.H) + 'mm)' : '');
 
-            var groupName = 'Hộp nắp gài & Đáy dán';
-            var subName = '';
-            var boxType = 'reverse-tuck';
-            var comboLow = (comboTitle || '').toLowerCase();
-
-            // Tính toán kích thước hộp ước lượng chuẩn xác từ kích thước trải khuôn
-            var estTuckW = Math.max(25, Math.round((bClust.w - 15) / 4));
-            var estTuckH = Math.max(30, Math.round(bClust.h - 2 * estTuckW));
-            if (estTuckH < 30) estTuckH = Math.max(30, Math.round(bClust.h * 0.55));
-            var defaultTuckDRC = { L: estTuckW, W: estTuckW, H: estTuckH };
-
-            // A. Nhóm: BỘ HỘP ÂM DƯƠNG KÈM TÚI
-            if (comboLow.indexOf('âm dương') !== -1 || lowText.indexOf('âm dương') !== -1 ||
-                (lowText.indexOf('đáy hộp') !== -1 && lowText.indexOf('37') !== -1) ||
-                (lowText.indexOf('nắp hộp') !== -1 && lowText.indexOf('37.5') !== -1)) {
-                groupName = 'Bộ hộp Âm Dương Kèm túi';
-                if (lowText.indexOf('đáy') !== -1) {
-                    subName = 'Đáy hộp';
-                    boxType = 'tray';
-                    if (drcVals) {
-                        var dArr = [drcVals.d1, drcVals.d2, drcVals.d3].sort(function (a, b) { return a - b; });
-                        drc = { L: dArr[2], W: dArr[1], H: dArr[0] };
-                    } else {
-                        drc = { L: 370, W: 300, H: 70 };
-                    }
-                } else if (lowText.indexOf('nắp') !== -1) {
-                    subName = 'Nắp hộp';
-                    boxType = 'tray';
-                    if (drcVals) {
-                        var dArr = [drcVals.d1, drcVals.d2, drcVals.d3].sort(function (a, b) { return a - b; });
-                        drc = { L: dArr[2], W: dArr[1], H: dArr[0] };
-                    } else {
-                        drc = { L: 375, W: 305, H: 40 };
-                    }
-                } else if (lowText.indexOf('túi') !== -1 || bClust.h > bClust.w * 0.7) {
-                    subName = 'Túi giấy xách ngoài';
-                    boxType = 'tote-bag';
-                    if (drcVals) {
-                        var dArr = [drcVals.d1, drcVals.d2, drcVals.d3].sort(function (a, b) { return a - b; });
-                        drc = { L: dArr[2], W: dArr[0], H: dArr[1] };
-                    } else {
-                        drc = { L: 385, W: 80, H: 315 };
-                    }
-                } else {
-                    subName = 'Khay âm dương';
-                    boxType = 'tray';
-                    drc = { L: 370, W: 300, H: 60 };
-                }
-            }
-            // B. Nhóm: BỘ HỘP BÁNH TRUNG THU NẮP RÚT
-            else if (comboLow.indexOf('nắp rút') !== -1 || (comboLow.indexOf('trung thu') !== -1 && comboLow.indexOf('2 bánh') === -1) || lowText.indexOf('nắp rút') !== -1) {
-                groupName = 'Bộ hộp bánh trung thu (Nắp rút)';
-                if (lowText.indexOf('rút') !== -1 || lowText.indexOf('vỏ bao') !== -1 || lowText.indexOf('hộp mẹ') !== -1 || (bClust.w > bClust.h * 1.5 && bClust.paths.length <= 10)) {
-                    subName = 'Vỏ hộp mẹ dạng ống rút';
-                    boxType = 'sleeve-drawer';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 320, W: 255, H: 75 };
-                } else if (lowText.indexOf('định hình') !== -1 || (bClust.innerCutouts && bClust.innerCutouts.length >= 3)) {
-                    subName = 'Khay định hình 4 ô';
-                    boxType = 'divider-tray';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 305, W: 240, H: 45 };
-                } else if (lowText.indexOf('khay') !== -1 || lowText.indexOf('đáy') !== -1) {
-                    subName = 'Khay đựng';
-                    boxType = 'tray';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 310, W: 245, H: 70 };
-                } else if (lowText.indexOf('trà') !== -1) {
-                    subName = 'Hộp trà';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 75, W: 75, H: 140 };
-                } else if (lowText.indexOf('con') !== -1) {
-                    subName = 'Hộp con đựng bánh';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 85, W: 85, H: 55 };
-                } else if (lowText.indexOf('túi') !== -1) {
-                    subName = 'Túi giấy xách ngoài';
-                    boxType = 'tote-bag';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 340, W: 90, H: 280 };
-                } else {
-                    subName = 'Khay hộp trung thu';
-                    boxType = 'tray';
-                    drc = { L: 310, W: 245, H: 70 };
-                }
-            }
-            // C. Nhóm: COMBO ĐỒ ĂN NHANH (Gà rán & Burger)
-            else if (comboLow.indexOf('đồ ăn nhanh') !== -1 || comboLow.indexOf('gà rán') !== -1 || comboLow.indexOf('burger') !== -1 ||
-                     lowText.indexOf('gà rán') !== -1 || lowText.indexOf('hamburger') !== -1 || lowText.indexOf('burger') !== -1 || lowText.indexOf('khoai tây') !== -1) {
-                groupName = 'Combo Đồ ăn nhanh (Gà rán & Burger)';
-                if (lowText.indexOf('hamburger') !== -1 || lowText.indexOf('burger') !== -1) {
-                    subName = 'Hộp bánh Hamburger';
-                    boxType = 'burger-box';
-                    drc = (drcVals && drcVals.d1 <= 150) ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 105, W: 105, H: 70 };
-                } else if (lowText.indexOf('khoai tây') !== -1) {
-                    subName = 'Hộp đựng khoai tây chiên';
-                    boxType = 'fries-box';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 85, W: 50, H: 110 };
-                } else if (lowText.indexOf('túi') !== -1) {
-                    subName = 'Túi đựng gà rán';
-                    boxType = 'chicken-bag';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 200, W: 100, H: 300 };
-                } else {
-                    subName = 'Hộp đựng gà rán';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 200, W: 120, H: 70 };
-                }
-            }
-            // D. Nhóm: HỘP BÁNH SINH NHẬT
-            else if (comboLow.indexOf('sinh nhật') !== -1 || lowText.indexOf('sinh nhật') !== -1 || lowText.indexOf('bánh kem') !== -1) {
-                groupName = 'Hộp bánh sinh nhật';
-                subName = 'Hộp bánh sinh nhật';
-                boxType = 'cake-box';
-                drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 260, W: 260, H: 180 };
-            }
-            // E. Nhóm: HỘP BÁNH TRUNG THU 2 BÁNH
-            else if (comboLow.indexOf('2 bánh') !== -1 || lowText.indexOf('2 bánh') !== -1) {
-                groupName = 'Hộp bánh trung thu 2 bánh';
-                subName = 'Hộp bánh trung thu 2 bánh';
-                boxType = 'reverse-tuck';
-                drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 180, W: 95, H: 60 };
-            }
-            // F. Nhóm: TÚI GIẤY & BÌ THƯ
-            else if (comboLow.indexOf('bì thư') !== -1 || lowText.indexOf('túi giấy') !== -1 || lowText.indexOf('bì thư') !== -1 || lowText.indexOf('phong bì') !== -1) {
-                groupName = 'Túi giấy & Bì thư';
-                if (lowText.indexOf('bì thư') !== -1 || lowText.indexOf('phong bì') !== -1) {
-                    var isBig = (lowText.indexOf('25x34') !== -1 || lowText.indexOf('25×34') !== -1 || bClust.w > 300);
-                    subName = isBig ? 'Bì thư 25x34' : 'Bì thư 12x22';
-                    boxType = 'envelope';
-                    drc = isBig ? { L: 340, W: 250, H: 15 } : { L: 220, W: 120, H: 10 };
-                } else if (lowText.indexOf('có nắp') !== -1) {
-                    subName = 'Túi giấy có nắp';
-                    boxType = 'chicken-bag';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 250, W: 100, H: 300 };
-                } else {
-                    subName = 'Túi giấy không nắp';
-                    boxType = 'tote-bag';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: 250, W: 100, H: 300 };
-                }
-            }
-            // G. Nhóm: HỘP NẮP GÀI & ĐÁY DÁN (Bao gồm 8 mẫu chuẩn trong bộ khuôn)
-            else {
-                groupName = 'Hộp nắp gài & Đáy dán';
-                if (lowText.indexOf('đáy khóa') !== -1 || lowText.indexOf('gài đáy khóa') !== -1 || lowText.indexOf('khóa') !== -1) {
-                    subName = 'Hộp nắp gài đáy khóa';
-                    boxType = 'crash-lock';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
-                } else if (lowText.indexOf('cùng chiều') !== -1) {
-                    subName = (lowText.indexOf('mép dán') !== -1) ? 'Hộp 2 nắp cùng chiều mép dán' : 'Hộp 2 nắp cùng chiều';
-                    boxType = 'straight-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
-                } else if (lowText.indexOf('quai xách') !== -1 || lowText.indexOf('chóp') !== -1) {
-                    subName = 'Hộp chóp có quai xách';
-                    boxType = 'gable-box';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: Math.round((bClust.w - 15) * 0.28), W: Math.round((bClust.w - 15) * 0.22), H: Math.round(bClust.h * 0.55) };
-                } else if (lowText.indexOf('dẹp') !== -1 || lowText.indexOf('đẹp') !== -1) {
-                    subName = 'Hộp dẹp - đáy dán';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: Math.round((bClust.w - 15) * 0.35), W: Math.round((bClust.w - 15) * 0.15), H: estTuckH };
-                } else if (lowText.indexOf('đáy dán') !== -1) {
-                    subName = 'Hộp đáy dán';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
-                } else if (lowText.indexOf('thùng') !== -1 || lowText.indexOf('carton') !== -1) {
-                    subName = 'Thùng carton';
-                    boxType = 'rsc-carton';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : { L: Math.round(bClust.w * 0.35), W: Math.round(bClust.w * 0.25), H: Math.round(bClust.h * 0.4) };
-                } else if (lowText.indexOf('gài') !== -1 || lowText.indexOf('nắp gài') !== -1) {
-                    subName = 'Hộp nắp gài đáy gài';
-                    boxType = 'reverse-tuck';
-                    drc = drcVals ? { L: drcVals.d1, W: drcVals.d2, H: drcVals.d3 } : defaultTuckDRC;
-                } else {
-                    // Fallback theo hình học: chỉ khi có chữ 'khay' rõ ràng mới là khay, còn lại mặc định là hộp gài
-                    if (lowText.indexOf('khay') !== -1) {
-                        subName = 'Khay hộp';
-                        boxType = 'tray';
-                        var estH = Math.min(bClust.w, bClust.h) * 0.18;
-                        drc = { L: Math.round(bClust.w - 2 * estH), W: Math.round(bClust.h - 2 * estH), H: Math.round(estH) };
-                    } else {
-                        subName = 'Hộp nắp gài';
-                        boxType = 'reverse-tuck';
-                        drc = defaultTuckDRC;
-                    }
-                }
+            // Chuẩn hoá toạ độ về gốc (0,0) của khuôn
+            var bCuts = [], bCreases = [];
+            for (var pi2 = 0; pi2 < B.paths.length; pi2++) {
+                var cp = B.paths[pi2], np = [];
+                for (q = 0; q < cp.pts.length; q++) np.push([cp.pts[q][0] - B.minX, cp.pts[q][1] - B.minY]);
+                if (cp.isCrease) bCreases.push(np); else bCuts.push({ pts: np, closed: cp.closed });
             }
 
-            var finalName = subName;
-            if (drc) {
-                finalName += ' (' + Math.round(drc.L) + '×' + Math.round(drc.W) + '×' + Math.round(drc.H) + 'mm)';
-            }
-
-            // 4. Chuẩn hóa toạ độ các đường cắt & cấn về gốc (0,0) của hộp này
-            function normBoxPts(pts, oX, oY) {
-                var res = [];
-                for (var np = 0; np < pts.length; np++) {
-                    res.push([pts[np][0] - oX, pts[np][1] - oY]);
-                }
-                return res;
-            }
-
-            var bCuts = [];
-            var bCreases = [];
-
-            for (var pIdx = 0; pIdx < bClust.paths.length; pIdx++) {
-                var cPath = bClust.paths[pIdx];
-                var nPts = normBoxPts(cPath.pts, bClust.minX, bClust.minY);
-                if (cPath.isCrease) {
-                    bCreases.push(nPts);
-                } else {
-                    bCuts.push({ pts: nPts, closed: cPath.closed });
-                }
-            }
-
-            boxesData.push({
+            boxes.push({
                 id: 'scanned_box_' + (bi + 1),
+                uid: 'scan_' + (new Date().getTime()) + '_' + (bi + 1),
                 name: finalName,
-                group: groupName,
-                comboTitle: comboTitle || null,
-                boxType: boxType,
+                libGroup: cls.lib,
+                group: PS3D_LIB_GROUPS[cls.lib],
+                groupId: grp ? 'grp_' + grp.id : (ownFrame ? 'frame_' + ownFrame.id : 'free_' + bi),
+                comboTitle: grpTitleT ? grpTitleT.text : null,
+                boxType: cls.type,
+                templateType: cls.type,
                 drc: drc,
-                width: bClust.w,
-                height: bClust.h,
-                cutsCount: bCuts.length,
-                creasesCount: bCreases.length,
-                rect: { x0: 0, y0: 0, w: bClust.w, h: bClust.h },
-                cuts: bCuts,
-                creases: bCreases
+                drcSource: drcSource,
+                innerCutouts: B.innerCutouts,
+                subParts: B.subParts || 0,
+                width: B.w, height: B.h,
+                origin: { x: B.minX, y: B.minY },
+                cutsCount: bCuts.length, creasesCount: bCreases.length,
+                rect: { x0: 0, y0: 0, w: B.w, h: B.h },
+                cuts: bCuts, creases: bCreases
             });
         }
 
+        var nFrames = 0;
+        for (k = 0; k < containers.length; k++) nFrames++;
         return _ps3dOk({
             docName: doc.name,
-            totalBoxes: boxesData.length,
-            boxes: boxesData,
-            activeBox: boxesData.length > 0 ? boxesData[0] : null
+            totalBoxes: boxes.length,
+            stats: { frames: nFrames, annotationLines: annotated, droppedParts: dropped, rawClusters: merged.length },
+            boxes: boxes,
+            activeBox: boxes.length > 0 ? boxes[0] : null
         });
     } catch (e) {
         return _ps3dErr(e);
     }
 }
 
-/* jshint ignore:end */
+// ════════════════════════════════════════════════════════════════════════════
+// AUTO-REBUILD CLEAN 2D DIELINE — Vẽ lại khuôn chuẩn kỹ thuật sang ARTBOARD MỚI
+//   CUT   : nét liền xanh dương #0066EE 0.75pt
+//   CREASE: nét đứt đỏ #EE1E23 0.5pt [4, 2.5]
+//   BLEED : nét xanh lá #28B446 0.4pt (+bleed mm ôm sát biên dạng)
+// json = { bleed, items: [{ name, drcText, rect, cuts, creases, panels }] }
+// ════════════════════════════════════════════════════════════════════════════
+function _ps3dRGB(r, g, b) { var c = new RGBColor(); c.red = r; c.green = g; c.blue = b; return c; }
+function _ps3dSpotLike(doc, hex) {
+    var r = parseInt(hex.substr(1, 2), 16), g = parseInt(hex.substr(3, 2), 16), b = parseInt(hex.substr(5, 2), 16);
+    if (doc.documentColorSpace === DocumentColorSpace.RGB) return _ps3dRGB(r, g, b);
+    // Quy đổi RGB → CMYK đơn giản
+    var c = 1 - r / 255, m = 1 - g / 255, y = 1 - b / 255, kk = Math.min(c, m, y);
+    if (kk >= 1) return _ps3dCMYK(0, 0, 0, 100);
+    return _ps3dCMYK(Math.round((c - kk) / (1 - kk) * 100), Math.round((m - kk) / (1 - kk) * 100), Math.round((y - kk) / (1 - kk) * 100), Math.round(kk * 100));
+}
+function _ps3dSubLayer(parent, name) {
+    for (var i = 0; i < parent.layers.length; i++) if (parent.layers[i].name === name) return parent.layers[i];
+    var l = parent.layers.add(); l.name = name; return l;
+}
 
+function ps3d_drawCleanDielines(json) {
+    try {
+        if (!app.documents.length) return _ps3dErr('Ch\u01B0a m\u1EDF file n\u00E0o.');
+        var data = JSON.parse(json);
+        var doc = app.activeDocument;
+        var items = data.items || [];
+        if (!items.length) return _ps3dErr('Kh\u00F4ng c\u00F3 khu\u00F4n n\u00E0o \u0111\u1EC3 v\u1EBD l\u1EA1i.');
+
+        var root = _ps3dLayer(doc, PS3D_CLEAN_LAYER);
+        root.zOrder(ZOrderMethod.BRINGTOFRONT);
+        var lBleed = _ps3dSubLayer(root, 'BLEED (+' + (data.bleed || 3) + 'mm)');
+        var lCrease = _ps3dSubLayer(root, 'CREASE (G\u1EA5p)');
+        var lCut = _ps3dSubLayer(root, 'CUT (C\u1EAFt)');
+        var lLabel = _ps3dSubLayer(root, 'NH\u00C3N');
+
+        var blue = _ps3dSpotLike(doc, '#0066EE'), red = _ps3dSpotLike(doc, '#EE1E23');
+        var green = _ps3dSpotLike(doc, '#28B446'), ink = _ps3dSpotLike(doc, '#333333');
+
+        // Vùng đặt artboard mới: hàng mới BÊN DƯỚI toàn bộ artboard hiện có
+        var uL = Infinity, uB = Infinity, uR = -Infinity;
+        for (var a = 0; a < doc.artboards.length; a++) {
+            var ar = doc.artboards[a].artboardRect;
+            if (ar[0] < uL) uL = ar[0]; if (ar[2] > uR) uR = ar[2]; if (ar[3] < uB) uB = ar[3];
+        }
+        var GAP = _ps3dMM(30), MARGIN = _ps3dMM(15), LABEL_H = _ps3dMM(14);
+        var rowWidth = Math.max(uR - uL, _ps3dMM(1500));
+        var curX = uL, curTop = uB - GAP * 2, rowH = 0;
+        var made = 0, bleedFail = 0;
+
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i], r = it.rect;
+            var bw = _ps3dMM(r.w) + MARGIN * 2, bh = _ps3dMM(r.h) + MARGIN * 2 + LABEL_H;
+            if (curX > uL && curX + bw > uL + rowWidth) { curX = uL; curTop -= rowH + GAP; rowH = 0; }
+            if (curTop - bh < -16000) return _ps3dErr('H\u1EBFt kh\u00F4ng gian canvas \u0111\u1EC3 th\u00EAm artboard.');
+
+            var ab = doc.artboards.add([curX, curTop, curX + bw, curTop - bh]);
+            try { ab.name = String(it.name || ('Khuon ' + (i + 1))).substring(0, 60); } catch (eN) {}
+            var left = curX + MARGIN, bottom = curTop - bh + MARGIN;
+            (function (left, bottom, r) {
+                function P(qq) { return [left + _ps3dMM(qq[0] - r.x0), bottom + _ps3dMM(qq[1] - r.y0)]; }
+                var k, pts, path;
+                for (k = 0; k < it.cuts.length; k++) {
+                    pts = [];
+                    for (var j = 0; j < it.cuts[k].pts.length; j++) pts.push(P(it.cuts[k].pts[j]));
+                    path = lCut.pathItems.add(); path.setEntirePath(pts); path.closed = !!it.cuts[k].closed;
+                    path.filled = false; path.stroked = true; path.strokeColor = blue; path.strokeWidth = 0.75; path.strokeDashes = [];
+                }
+                for (k = 0; k < it.creases.length; k++) {
+                    path = lCrease.pathItems.add(); path.setEntirePath([P(it.creases[k][0]), P(it.creases[k][1])]);
+                    path.filled = false; path.stroked = true; path.strokeColor = red; path.strokeWidth = 0.5; path.strokeDashes = [4, 2.5];
+                }
+                // Bleed: hợp các mặt + Offset Path (dùng lại thủ tục chuẩn của plugin)
+                var ok = _ps3dMakeBleed(doc, lBleed, { bleed: data.bleed || 3, panels: it.panels }, P);
+                if (!ok) bleedFail++;
+                var tf = lLabel.textFrames.pointText([left, curTop - MARGIN * 0.6 - _ps3dMM(5)]);
+                tf.contents = (it.name || '') + (it.drcText ? '   \u2022   ' + it.drcText : '');
+                tf.textRange.characterAttributes.size = 11;
+                tf.textRange.characterAttributes.fillColor = ink;
+            })(left, bottom, r);
+
+            curX += bw + GAP;
+            if (bh > rowH) rowH = bh;
+            made++;
+        }
+        try { doc.selection = null; } catch (eS) {}
+        return _ps3dOk({ artboards: made, bleedFail: bleedFail, layer: PS3D_CLEAN_LAYER });
+    } catch (e) {
+        return _ps3dErr(e);
+    }
+}
+
+/* jshint ignore:end */
