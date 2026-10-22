@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Packaging Studio 3D</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<!-- ═══ APP CONTAINER (Side-by-side hoặc Stacked) ═══ -->
+<div id="app-layout">
+
+  <!-- ═══ 3D VIEWPORT CONTAINER (Cột trái) ═══ -->
+  <div id="viewport-pane">
+    <div id="viewport-wrap">
+      <canvas id="canvas3d"></canvas>
+
+      <!-- Pacdora 3D Badge -->
+      <div class="pacdora-badge-3d" id="btn-3d-badge" title="Đặt lại góc nhìn 3D">
+        <svg viewBox="0 0 44 44" width="38" height="38" fill="none">
+          <path d="M 23 8 A 15 15 0 1 1 9 26" stroke="#cccccc" stroke-width="2.6" stroke-linecap="round"/>
+          <polygon points="6,21 9,27 15,23" fill="#cccccc"/>
+          <text x="23" y="24" text-anchor="middle" font-family="Segoe UI, sans-serif" font-weight="800" font-size="12.5" fill="#cccccc">3D</text>
+        </svg>
+      </div>
+
+      <!-- Top Tools trên Viewport (Ảnh 2) -->
+      <div id="viewport-tools">
+        <button class="vp-btn" id="btn-toggle-sidebar" title="Ẩn/Hiện thanh điều khiển (Mở rộng góc nhìn)">☰</button>
+        <button class="vp-btn" id="btn-reset-cam" title="Đặt lại camera">⟲</button>
+        <button class="vp-btn" id="btn-toggle-wire" title="Khung dây Wireframe">⬡</button>
+        <button class="vp-btn" id="btn-screenshot" title="Chụp ảnh 3D">📷</button>
+      </div>
+
+      <div id="rotate-hint">Kéo để xoay · Cuộn để zoom</div>
+      <div id="doc-badge" class="doc-badge" title="Mô hình 3D đang theo file này"></div>
+
+      <!-- Resize Grip -->
+      <div class="pacdora-resize-grip">
+        <svg width="18" height="18" viewBox="0 0 18 18">
+          <line x1="3" y1="15" x2="15" y2="3" stroke="#666677" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="7" y1="15" x2="15" y2="7" stroke="#666677" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="11" y1="15" x2="15" y2="11" stroke="#666677" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <!-- Pacdora Floating Slider Pill (Ảnh 2) -->
+      <div class="pacdora-slider-pill-wrap">
+        <div class="pacdora-slider-pill">
+          <span class="pill-ouvr">Ouvrir</span>
+          <input type="range" id="slider-main-pill" min="0" max="100" value="100" step="0.5"/>
+          <span class="pill-ferm">Fermer</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONTROLS SIDEBAR (Cột phải) ═══ -->
+  <div id="controls-pane">
+
+    <!-- Header Panel -->
+    <div id="header">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:15px">📦</span>
+        <h1>Packaging Studio 3D</h1>
+      </div>
+      <span class="version" id="app-version">v2.1 · Connected</span>
+    </div>
+
+    <!-- Controls Body -->
+    <div id="controls">
+
+      <!-- ① Thư viện mẫu hộp & Search/Filter -->
+      <div class="section collapsible" id="sec-library">
+        <div class="section-header" data-toggle="sec-library">
+          <div class="sec-title">
+            <span class="toggle-icon">▼</span>
+            <span>▤ Thư viện mẫu hộp</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span id="tpl-count" class="badge-count"></span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="search-filter-box">
+            <input type="text" id="tpl-search" placeholder="🔍 Tìm mẫu hộp (gài, mailer, burger, khay, túi...)" />
+            <select id="tpl-category-filter">
+              <option value="all">Tất cả danh mục</option>
+              <option value="Khuôn đã lưu">⭐ Khuôn đã lưu / Tùy chỉnh</option>
+              <option value="Hộp 2 mảnh">Hộp âm dương (Lid & Base)</option>
+              <option value="Túi giấy">Túi giấy Kraft (Tote Bag)</option>
+              <option value="Hộp gài">Hộp gài (Tuck End)</option>
+              <option value="Hộp dẹp / Ship">Hộp dẹp / Pizza / Mailer / Burger</option>
+              <option value="Hộp kéo / Bao">Hộp bao diêm / Ngăn kéo</option>
+              <option value="Khuôn bóc tách tự do">🔍 Khuôn AI đã bóc tách</option>
+            </select>
+          </div>
+
+          <!-- Thanh công cụ Chọn nhiều / Xóa hàng loạt & Mở rộng 3/6 Cột -->
+          <div class="batch-bar" id="batch-bar">
+            <div style="display:flex;align-items:center;gap:6px">
+              <label class="batch-check-label">
+                <input type="checkbox" id="chk-select-all" /> Chọn tất cả
+              </label>
+              <button class="batch-btn batch-btn-secondary" id="btn-deselect-all" title="Bỏ chọn tất cả các mẫu">
+                Bỏ chọn
+              </button>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <button class="btn-toggle-rows" id="btn-toggle-rows" title="Mở rộng xem 6 hàng mẫu (thay vì 3 hàng)">
+                ↕ <span id="rows-label">6 hàng</span>
+              </button>
+              <button class="batch-btn batch-delete" id="btn-batch-delete" title="Xóa các mẫu được chọn">
+                🗑️ Xóa (<span id="batch-selected-count">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <div class="tpl-grid" id="tpl-grid"></div>
+        </div>
+      </div>
+
+      <!-- ② Kích thước & Thông số khuôn (Chia 2 cột theo ảnh 2) -->
+      <div class="section collapsible" id="sec-params">
+        <div class="section-header" data-toggle="sec-params">
+          <div class="sec-title">
+            <span class="toggle-icon">▼</span>
+            <span>📐 Kích thước (mm)</span>
+          </div>
+          <span id="tpl-name-label" class="badge-hl"></span>
+        </div>
+        <div class="section-body">
+          <div class="param-grid" id="param-grid"></div>
+          <div class="row" style="margin-top:6px">
+            <label>Bleed (Lề tràn)</label>
+            <input type="number" id="inp-bleed" value="3" min="0" max="15" step="0.5"/>
+            <span class="unit">mm</span>
+          </div>
+
+          <!-- Nút lưu: Lưu đè & Lưu thành mẫu mới -->
+          <div class="save-actions-row">
+            <button class="btn-save-overwrite" id="btn-save-overwrite" title="Lưu đè các kích thước này vào mẫu đang chọn trong thư viện">
+              💾 Lưu đè mẫu này
+            </button>
+            <button class="btn-save-as-new" id="btn-save-as-new" title="Lưu kích thước này thành một mẫu mới riêng biệt trong thư viện">
+              ➕ Lưu tạo mới
+            </button>
+          </div>
+
+          <!-- Thông số khuôn bế live -->
+          <div class="dieline-live-box">
+            <div class="dl-row">
+              <span class="dl-lbl">Khổ trải khuôn:</span>
+              <span class="dl-val" id="info-size">—</span>
+              <span class="dl-lbl">Artboard:</span>
+              <span class="dl-val" id="info-ab">—</span>
+            </div>
+            <div class="dl-row">
+              <span class="dl-lbl">Số mặt phẳng:</span>
+              <span class="dl-val" id="info-panels">—</span>
+              <span class="dl-lbl">Đường cấn gấp:</span>
+              <span class="dl-val" id="info-creases">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ File đang mở trong Illustrator -->
+      <div class="section collapsible" id="sec-files">
+        <div class="section-header" data-toggle="sec-files">
+          <div class="sec-title">
+            <span class="toggle-icon">▼</span>
+            <span>🕒 File đang mở trong AI</span>
+          </div>
+          <span id="doc-count" class="badge-count"></span>
+        </div>
+        <div class="section-body">
+          <div class="doc-list" id="doc-list">
+            <div class="doc-empty">Chưa có file nào.</div>
+          </div>
+          <label class="chk-row">
+            <input type="checkbox" id="chk-follow"/> 3D tự đổi theo file đang chọn
+          </label>
+        </div>
+      </div>
+
+      <!-- ④ Thao tác -->
+      <div class="section collapsible" id="sec-actions">
+        <div class="section-header" data-toggle="sec-actions">
+          <div class="sec-title">
+            <span class="toggle-icon">▼</span>
+            <span>⚡ Thao tác</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="action-grid">
+            <button class="btn btn-primary" id="btn-scan-dieline" style="grid-column: 1 / -1; background: linear-gradient(135deg, #2563eb, #7c3aed); font-weight: 600;" title="Quét mọi đường khuôn (Cắt & Cấn) trong file Illustrator này và biến thành 3D">
+              ⚡ Quét khuôn AI này → Dựng 3D (Tự Do)
+            </button>
+            <button class="btn btn-secondary" id="btn-new-doc" title="Tạo file AI mới với khuôn 2D chuẩn kỹ thuật">
+              ✚ Tạo file mới
+            </button>
+            <button class="btn btn-secondary" id="btn-update-doc" title="Vẽ lại khuôn vào file đang mở (giữ nguyên thiết kế ARTWORK)">
+              ↻ Áp vào file này
+            </button>
+            <button class="btn btn-action" id="btn-sync-texture" title="Lấy toàn bộ thiết kế layer ARTWORK dán lên mô hình 3D real-time">
+              🎨 Sync Artwork
+            </button>
+            <button class="btn btn-action" id="btn-export-mockup" title="Xuất ảnh PNG Mockup 3D sắc nét và tự động mở thư mục">
+              💾 Xuất mockup
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ Vật liệu & Hiển thị -->
+      <div class="section collapsible" id="sec-materials">
+        <div class="section-header" data-toggle="sec-materials">
+          <div class="sec-title">
+            <span class="toggle-icon">▼</span>
+            <span>🎨 Vật liệu & Hiển thị</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="mat-chips">
+            <div class="mat-chip active" data-mat="kraft">🤎 Kraft</div>
+            <div class="mat-chip" data-mat="ivory">🤍 Ivory</div>
+            <div class="mat-chip" data-mat="flute">📦 Sóng E</div>
+            <div class="mat-chip" data-mat="matte_black">🖤 Đen nhám</div>
+            <div class="mat-chip" data-mat="gold_foil">✨ Ép kim vàng</div>
+            <div class="mat-chip" data-mat="silver_foil">🥈 Ép kim bạc</div>
+          </div>
+
+          <div style="display:flex; gap:6px; margin: 8px 0;">
+            <button class="btn btn-secondary" id="btn-mode-toggle" style="flex:1">🎁 Mở nắp</button>
+            <button class="btn btn-secondary" id="btn-autoplay" style="flex:1">▶ Auto Play</button>
+          </div>
+
+          <div class="slider-row">
+            <label>Gập hộp</label>
+            <input type="range" id="slider-lid" min="0" max="100" value="100" step="0.5"/>
+            <span class="slider-val" id="lid-val">Đóng</span>
+          </div>
+          <div class="slider-row">
+            <label>Ánh sáng</label>
+            <input type="range" id="slider-light" min="0" max="100" value="65"/>
+            <span class="slider-val" id="light-val">65%</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:48px"></div>
+    </div>
+
+  </div> <!-- /#controls-pane -->
+
+</div> <!-- /#app-layout -->
+
+<!-- Statusbar -->
+<div id="statusbar">
+  <div class="dot"></div>
+  <span id="status-text">Đang kết nối Illustrator...</span>
+</div>
+
+<script src="js/three.min.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/CSInterface.js"></script>
+<script src="js/ps3d_core.js"></script>
+<!-- Các mẫu hộp mở rộng -->
+<script src="templates/reverse_tuck.js"></script>
+<script src="templates/straight_tuck.js"></script>
+<script src="templates/tray.js"></script>
+<script src="templates/mailer_box.js"></script>
+<script src="templates/crash_lock.js"></script>
+<script src="templates/sleeve_drawer.js"></script>
+<script src="templates/tote_bag.js"></script>
+<script src="templates/burger_box.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

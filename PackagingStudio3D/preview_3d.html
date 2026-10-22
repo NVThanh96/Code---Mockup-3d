@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mô Phỏng 3D Đóng Mở Hộp — Chuẩn Pacdora 3D Dieline</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
+      background: #1e1e24;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #333333;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP HEADER / TOOLBAR ── */
+    #top-nav {
+      height: 48px;
+      background: #141418;
+      border-bottom: 1px solid #2d2d35;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .brand .badge {
+      background: #ff334b;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .top-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .param-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #23232b;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid #363642;
+    }
+    .param-group label {
+      color: #9ea0a8;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .param-group input {
+      width: 44px;
+      height: 22px;
+      background: #141418;
+      border: 1px solid #444455;
+      border-radius: 4px;
+      color: #ffffff;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      outline: none;
+    }
+    .param-group input:focus {
+      border-color: #ff334b;
+    }
+    .btn-top {
+      height: 28px;
+      padding: 0 12px;
+      background: #2b2b36;
+      border: 1px solid #3d3d4c;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .btn-top:hover {
+      background: #393947;
+      color: #ffffff;
+    }
+    .btn-top.active {
+      background: #ff334b;
+      border-color: #ff334b;
+      color: #ffffff;
+    }
+
+    /* ── MAIN WORKSPACE ── */
+    #workspace {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at center, #2e2e38 0%, #1a1a22 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    /* ── PACDORA FLOATING 3D CARD (Hình 2) ── */
+    #pacdora-card {
+      position: relative;
+      width: min(85vw, 680px);
+      height: min(80vh, 620px);
+      background: linear-gradient(180deg, #f1f2f5 0%, #e2e4e9 100%);
+      border-radius: 32px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      transition: box-shadow 0.2s ease;
+    }
+
+    /* 3D Canvas */
+    #canvas-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    #canvas3d {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* ── TOP-RIGHT 3D BADGE (Ảnh số 2) ── */
+    .badge-3d {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      opacity: 0.88;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .badge-3d:hover {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    .badge-3d svg {
+      width: 40px;
+      height: 40px;
+    }
+
+    /* ── BOTTOM FLOATING PILL SLIDER (Ảnh số 2) ── */
+    .slider-pill-wrap {
+      position: absolute;
+      bottom: 22px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .slider-pill {
+      pointer-events: auto;
+      background: #ffffff;
+      border-radius: 9999px;
+      padding: 9px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.05);
+      font-size: 15px;
+      font-weight: 500;
+      color: #1a1a1a;
+      letter-spacing: -0.2px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .slider-pill:hover {
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+    }
+    .slider-pill .label-ouvr {
+      font-weight: 600;
+      color: #1c1c1c;
+      min-width: 44px;
+      text-align: right;
+    }
+    .slider-pill .label-ferm {
+      font-weight: 600;
+      color: #1c1c1c;
+      min-width: 48px;
+      text-align: left;
+    }
+
+    /* Thanh trượt Pacdora */
+    .slider-pill input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 4px;
+      background: #111111;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    .slider-pill input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid #111111;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+      transition: transform 0.1s ease;
+    }
+    .slider-pill input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    .slider-pill input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid #111111;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+    }
+
+    /* ── BOTTOM-LEFT RESIZE GRIP (Ảnh số 2) ── */
+    .resize-grip {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    /* ── FLOATING CONTROLS OVERLAY (Vật liệu, AutoPlay, Camera) ── */
+    .card-top-left {
+      position: absolute;
+      top: 16px;
+      left: 18px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 10;
+    }
+    .chip {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 16px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #444;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .chip:hover {
+      background: #ffffff;
+      color: #111;
+      transform: translateY(-1px);
+    }
+    .chip.active {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+
+    .card-bottom-right {
+      position: absolute;
+      bottom: 22px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 10;
+    }
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #222;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      transition: all 0.15s ease;
+    }
+    .icon-btn:hover {
+      background: #ffffff;
+      transform: scale(1.08);
+      color: #ff334b;
+    }
+
+    /* ── TOAST NOTIFICATION ── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #111;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ TOP NAVIGATION / PARAMETERS ═══ -->
+  <div id="top-nav">
+    <div class="brand">
+      <span>📦 Pacdora 3D Interactive Viewer</span>
+      <span class="badge">PRO DYNAMIC</span>
+    </div>
+
+    <div class="top-tools">
+      <div class="param-group">
+        <label>L:</label>
+        <input type="number" id="inp-L" value="50" min="10" max="600"/>
+        <label>W:</label>
+        <input type="number" id="inp-W" value="50" min="10" max="600"/>
+        <label>H:</label>
+        <input type="number" id="inp-H" value="45" min="10" max="600"/>
+        <span style="font-size:11px;color:#777">mm</span>
+      </div>
+
+      <button class="btn-top" id="btn-mode-lid" title="Chế độ mở đóng nắp hộp giống Pacdora">
+        🎁 Mở/Đóng nắp
+      </button>
+      <button class="btn-top" id="btn-mode-unfold" title="Chế độ trải phẳng từ 2D thành 3D">
+        📐 Trải phẳng 2D ⇄ 3D
+      </button>
+      <button class="btn-top" id="btn-autoplay" title="Tự động mở đóng hộp liên tục">
+        ▶ Tự động chạy
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ MAIN WORKSPACE ═══ -->
+  <div id="workspace">
+
+    <!-- ═══ PACDORA 3D CARD CONTAINER (Giống y hệt ảnh số 2) ═══ -->
+    <div id="pacdora-card">
+
+      <!-- TOP-LEFT: CHỌN VẬT LIỆU GIẤY -->
+      <div class="card-top-left">
+        <div class="chip active" data-mat="kraft" title="Giấy Kraft nâu (chuẩn Pacdora)">🤎 Kraft</div>
+        <div class="chip" data-mat="ivory" title="Giấy Ivory trắng">🤍 Ivory</div>
+        <div class="chip" data-mat="flute" title="Carton sóng E">📦 Sóng E</div>
+      </div>
+
+      <!-- TOP-RIGHT: HUY HIỆU 3D PACDORA CÓ MŨI TÊN XOAY (Ảnh số 2) -->
+      <div class="badge-3d" id="badge-3d" title="Kéo chuột để xoay 3D, cuộn để phóng to/thu nhỏ">
+        <svg viewBox="0 0 44 44" fill="none">
+          <!-- Mũi tên cong 3D -->
+          <path d="M 23 8 A 15 15 0 1 1 9 26" stroke="#222222" stroke-width="2.6" stroke-linecap="round"/>
+          <polygon points="6,21 9,27 15,23" fill="#222222"/>
+          <!-- Chữ 3D nổi bật -->
+          <text x="23" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="800" font-size="12.5" fill="#222222">3D</text>
+        </svg>
+      </div>
+
+      <!-- 3D VIEWPORT CANVAS -->
+      <div id="canvas-container">
+        <canvas id="canvas3d"></canvas>
+      </div>
+
+      <!-- BOTTOM-LEFT: VẠCH KÉO GÓC (Ảnh số 2) -->
+      <div class="resize-grip">
+        <svg width="18" height="18" viewBox="0 0 18 18">
+          <line x1="3" y1="15" x2="15" y2="3" stroke="#888899" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="7" y1="15" x2="15" y2="7" stroke="#888899" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="11" y1="15" x2="15" y2="11" stroke="#888899" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <!-- BOTTOM-CENTER: THANH TRƯỢT OUVRIR ────○──── FERMER (Ảnh số 2) -->
+      <div class="slider-pill-wrap">
+        <div class="slider-pill">
+          <span class="label-ouvr">Ouvrir</span>
+          <input type="range" id="slider-main" min="0" max="100" value="100" step="0.5"/>
+          <span class="label-ferm">Fermer</span>
+        </div>
+      </div>
+
+      <!-- BOTTOM-RIGHT: NÚT CÔNG CỤ NHANH -->
+      <div class="card-bottom-right">
+        <div class="icon-btn" id="btn-reset-cam" title="Đặt lại góc nhìn chuẩn (Isometric)">⟲</div>
+        <div class="icon-btn" id="btn-screenshot" title="Chụp ảnh Mockup 3D sắc nét (PNG)">📷</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div id="toast">Thông báo</div>
+
+  <!-- ═══ SCRIPTS: THREE.JS & ORBITCONTROLS ═══ -->
+  <!-- Ưu tiên nạp file cục bộ nếu có, tự động fallback CDN nếu chạy độc lập -->
+  <script src="PackagingStudio3D/js/three.min.js"></script>
+  <script src="js/three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+    }
+  </script>
+  <script src="PackagingStudio3D/js/OrbitControls.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script>
+    if (typeof THREE.OrbitControls === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+
+  <!-- Đọc cấu hình truyền từ Illustrator Script (nếu có) -->
+  <script src="preview_config.js"></script>
+  <script src="PackagingStudio3D/preview_config.js"></script>
+
+  <!-- ═══ CORE 3D FOLDING & VIEWPORT LOGIC ═══ -->
+  <script>
+    (function () {
+      "use strict";
+
+      // Đọc tham số URL hoặc file cấu hình từ Illustrator
+      var urlParams = new URLSearchParams(window.location.search);
+      var initCfg = window.PACDORA_INIT_CONFIG || {};
+
+      var state = {
+        L: parseFloat(urlParams.get("L")) || initCfg.L || 50,
+        W: parseFloat(urlParams.get("W")) || initCfg.W || 50,
+        H: parseFloat(urlParams.get("H")) || initCfg.H || 45,
+        G: parseFloat(urlParams.get("G")) || initCfg.G || 15,
+        bleed: parseFloat(urlParams.get("bleed")) || initCfg.bleed || 3,
+        material: urlParams.get("mat") || initCfg.material || "kraft",
+        sliderVal: 100, // 100 = Fermer (đóng), 0 = Ouvrir (mở)
+        mode: "lid", // 'lid' (mở nắp) hoặc 'unfold' (trải phẳng 2D)
+        autoPlay: false,
+        autoPlayDir: -0.6
+      };
+
+      // Đồng bộ vào input UI
+      document.getElementById("inp-L").value = state.L;
+      document.getElementById("inp-W").value = state.W;
+      document.getElementById("inp-H").value = state.H;
+
+      // Toast helper
+      function showToast(msg) {
+        var t = document.getElementById("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        setTimeout(function () { t.classList.remove("show"); }, 2400);
+      }
+
+      // ── PROCEDURAL PAPER TEXTURES ─────────────────────────────────────────
+      // Tạo texture bề mặt giấy thực tế (Kraft có sợi giấy li ti, Ivory satin, Sóng carton)
+      function createPaperTexture(matKey) {
+        var c = document.createElement("canvas");
+        c.width = 512;
+        c.height = 512;
+        var ctx = c.getContext("2d");
+
+        if (matKey === "kraft") {
+          // Màu Kraft vàng nâu chuẩn như ảnh 2
+          ctx.fillStyle = "#ceaa75";
+          ctx.fillRect(0, 0, 512, 512);
+
+          var imgData = ctx.getImageData(0, 0, 512, 512);
+          var d = imgData.data;
+          for (var i = 0; i < d.length; i += 4) {
+            var n = (Math.random() - 0.5) * 26;
+            d[i]     = Math.min(255, Math.max(0, d[i] + n));
+            d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + n * 0.9));
+            d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + n * 0.7));
+          }
+          ctx.putImageData(imgData, 0, 0);
+
+          // Sợi bột giấy hữu cơ li ti
+          ctx.fillStyle = "rgba(80, 50, 20, 0.22)";
+          for (var f = 0; f < 300; f++) {
+            var fx = Math.random() * 512;
+            var fy = Math.random() * 512;
+            ctx.fillRect(fx, fy, 1 + Math.random() * 2.5, 1);
+          }
+          ctx.fillStyle = "rgba(255, 245, 220, 0.25)";
+          for (var f = 0; f < 200; f++) {
+            var fx = Math.random() * 512;
+            var fy = Math.random() * 512;
+            ctx.fillRect(fx, fy, 1, 1);
+          }
+        } else if (matKey === "flute") {
+          ctx.fillStyle = "#c5a470";
+          ctx.fillRect(0, 0, 512, 512);
+          for (var x = 0; x < 512; x += 12) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.04)";
+            ctx.fillRect(x, 0, 3, 512);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+            ctx.fillRect(x + 3, 0, 3, 512);
+          }
+        } else {
+          // Ivory trắng
+          ctx.fillStyle = "#f8f8fb";
+          ctx.fillRect(0, 0, 512, 512);
+          var imgData = ctx.getImageData(0, 0, 512, 512);
+          var d = imgData.data;
+          for (var i = 0; i < d.length; i += 4) {
+            var n = (Math.random() - 0.5) * 8;
+            d[i]     = Math.min(255, Math.max(0, d[i] + n));
+            d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + n));
+            d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + n));
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+
+        var tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1.5, 1.5);
+        return tex;
+      }
+
+      // ── THREE.JS SETUP ────────────────────────────────────────────────────
+      var canvas = document.getElementById("canvas3d");
+      var container = document.getElementById("canvas-container");
+
+      var renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+
+      var scene = new THREE.Scene();
+
+      var camera = new THREE.PerspectiveCamera(36, 1, 1, 3000);
+
+      var controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.maxPolarAngle = Math.PI * 0.52; // Giữ góc nhìn đẹp không bị lộn ngược đáy
+      controls.minDistance = 60;
+      controls.maxDistance = 1400;
+
+      // ── LIGHTING SETUP (Studio ánh sáng mềm mại kiểu Pacdora) ───────────
+      var ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambientLight);
+
+      var mainSun = new THREE.DirectionalLight(0xfff8ee, 1.15);
+      mainSun.position.set(150, 240, 160);
+      mainSun.castShadow = true;
+      mainSun.shadow.mapSize.width = 1024;
+      mainSun.shadow.mapSize.height = 1024;
+      mainSun.shadow.bias = -0.0005;
+      mainSun.shadow.camera.near = 10;
+      mainSun.shadow.camera.far = 1200;
+      scene.add(mainSun);
+
+      var fillLight = new THREE.DirectionalLight(0xddeeff, 0.45);
+      fillLight.position.set(-160, 120, -100);
+      scene.add(fillLight);
+
+      var rimLight = new THREE.DirectionalLight(0xffffff, 0.35);
+      rimLight.position.set(0, 180, -220);
+      scene.add(rimLight);
+
+      // Sàn đón bóng đổ mềm (Shadow Catcher)
+      var shadowPlaneGeo = new THREE.PlaneGeometry(1200, 1200);
+      var shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+      var shadowMesh = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
+      shadowMesh.rotation.x = -Math.PI / 2;
+      shadowMesh.position.y = -0.1;
+      shadowMesh.receiveShadow = true;
+      scene.add(shadowMesh);
+
+      // ════════════════════════════════════════════════════════════════════════
+      // TẠO HÌNH HỌC TAI GÀI & TAI BỤI BO TRÒN CHUẨN XÁC THEO ẢNH 1
+      // ════════════════════════════════════════════════════════════════════════
+
+      // 1. Mép dán keo hình thang (Glue Flap bên trái Panel 1)
+      function createGlueFlapGeo(g, h) {
+        var s = new THREE.Shape();
+        s.moveTo(0, 0);
+        s.lineTo(0, h);
+        s.lineTo(-g, h - 3.5);
+        s.lineTo(-g, 3.5);
+        s.closePath();
+        return new THREE.ShapeGeometry(s, 4);
+      }
+
+      // 2. Lưỡi gài trên (Top Tuck Flap có tai khóa rãnh chốt và bo cong tròn lớn)
+      function createTopTuckFlapGeo(l, th) {
+        var s = new THREE.Shape();
+        var r = Math.min(8.0, th * 0.45);
+        var earW = 1.2;
+        var earDepth = 2.0;
+        s.moveTo(0, 0);
+        s.lineTo(0, earDepth);
+        s.lineTo(earW, earDepth);
+        s.lineTo(earW, 0);
+        s.lineTo(1.5, th - r);
+        s.quadraticCurveTo(1.5, th, 1.5 + r, th);
+        s.lineTo(l - 1.5 - r, th);
+        s.quadraticCurveTo(l - 1.5, th, l - 1.5, th - r);
+        s.lineTo(l - earW, 0);
+        s.lineTo(l - earW, earDepth);
+        s.lineTo(l, earDepth);
+        s.lineTo(l, 0);
+        s.closePath();
+        return new THREE.ShapeGeometry(s, 8);
+      }
+
+      // 3. Lưỡi gài đáy (Bottom Tuck Flap hướng xuống dưới có tai khóa)
+      function createBotTuckFlapGeo(l, th) {
+        var s = new THREE.Shape();
+        var r = Math.min(8.0, th * 0.45);
+        var earW = 1.2;
+        var earDepth = 2.0;
+        s.moveTo(0, 0);
+        s.lineTo(0, -earDepth);
+        s.lineTo(earW, -earDepth);
+        s.lineTo(earW, 0);
+        s.lineTo(1.5, -th + r);
+        s.quadraticCurveTo(1.5, -th, 1.5 + r, -th);
+        s.lineTo(l - 1.5 - r, -th);
+        s.quadraticCurveTo(l - 1.5, -th, l - 1.5, -th + r);
+        s.lineTo(l - earW, 0);
+        s.lineTo(l - earW, -earDepth);
+        s.lineTo(l, -earDepth);
+        s.lineTo(l, 0);
+        s.closePath();
+        return new THREE.ShapeGeometry(s, 8);
+      }
+
+      // 4. Tai bụi trên (Top Dust Flap có bo góc tròn mềm mại và vát dao 45 độ)
+      function createTopDustFlapGeo(w, dh) {
+        var s = new THREE.Shape();
+        var r = Math.min(10.0, dh * 0.45);
+        s.moveTo(0, 0);
+        s.lineTo(2.5, 3.0);
+        s.lineTo(3.0, dh - r);
+        s.quadraticCurveTo(3.0, dh, 3.0 + r, dh);
+        s.lineTo(w - 3.0 - r * 0.4, dh);
+        s.quadraticCurveTo(w - 2.5, dh, w - 2.5, dh - r * 0.4);
+        s.lineTo(w - 2.0, 3.0);
+        s.lineTo(w, 0);
+        s.closePath();
+        return new THREE.ShapeGeometry(s, 8);
+      }
+
+      // 5. Tai bụi đáy (Bottom Dust Flap hướng xuống dưới)
+      function createBotDustFlapGeo(w, dh) {
+        var s = new THREE.Shape();
+        var r = Math.min(10.0, dh * 0.45);
+        s.moveTo(0, 0);
+        s.lineTo(2.5, -3.0);
+        s.lineTo(3.0, -dh + r);
+        s.quadraticCurveTo(3.0, -dh, 3.0 + r, -dh);
+        s.lineTo(w - 3.0 - r * 0.4, -dh);
+        s.quadraticCurveTo(w - 2.5, -dh, w - 2.5, -dh + r * 0.4);
+        s.lineTo(w - 2.0, -3.0);
+        s.lineTo(w, 0);
+        s.closePath();
+        return new THREE.ShapeGeometry(s, 8);
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // DỰNG CÂY ĐỘNG HỌC (KINEMATIC TREE) THEO ĐÚNG CẤU TRÚC ẢNH 1
+      // ════════════════════════════════════════════════════════════════════════
+      var boxRoot = null;
+      var hinges = {};
+
+      function buildDynamicBox() {
+        if (boxRoot) {
+          scene.remove(boxRoot);
+          boxRoot.traverse(function (obj) {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+              if (Array.isArray(obj.material)) {
+                obj.material.forEach(function (m) { m.dispose(); });
+              } else {
+                obj.material.dispose();
+              }
+            }
+          });
+        }
+
+        var L = state.L;
+        var W = state.W;
+        var H = state.H;
+        var G = state.G || 15;
+        var tuckH = Math.max(14.0, Math.min(22.0, W * 0.35 + 4.0));
+        var dustH = Math.max(16.0, Math.min(32.0, W * 0.60));
+
+        var tex = createPaperTexture(state.material);
+
+        var paperMat = new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.76,
+          metalness: 0.02,
+          side: THREE.DoubleSide
+        });
+
+        boxRoot = new THREE.Group();
+        hinges = {};
+
+        // ── 1. GỐC LÀ PANEL 1 (MẶT TRƯỚC: L × H) ──
+        var p1Geo = new THREE.PlaneGeometry(L, H);
+        var p1Mesh = new THREE.Mesh(p1Geo, paperMat);
+        p1Mesh.position.set(L / 2, H / 2, 0);
+        p1Mesh.castShadow = true;
+        p1Mesh.receiveShadow = true;
+        boxRoot.add(p1Mesh);
+        hinges.p1Mesh = p1Mesh;
+
+        // ── 2. MÉP DÁN KEO (GLUE FLAP) TẠI X = 0 CỦA PANEL 1 ──
+        var glueHinge = new THREE.Group();
+        glueHinge.position.set(0, 0, 0);
+        var glueMesh = new THREE.Mesh(createGlueFlapGeo(G, H), paperMat);
+        glueMesh.castShadow = true;
+        glueHinge.add(glueMesh);
+        boxRoot.add(glueHinge);
+        hinges.glue = glueHinge;
+
+        // ── 3. NẮP TRÊN (TOP LID) TẠI Y = H CỦA PANEL 1 (Ảnh 1) ──
+        var topLidHinge = new THREE.Group();
+        topLidHinge.position.set(0, H, 0);
+        var topLidMesh = new THREE.Mesh(new THREE.PlaneGeometry(L, W), paperMat);
+        topLidMesh.position.set(L / 2, W / 2, 0);
+        topLidMesh.castShadow = true;
+        topLidHinge.add(topLidMesh);
+
+        // Lưỡi gài trên (Top Tuck Flap) tại y = W của nắp trên
+        var topTuckHinge = new THREE.Group();
+        topTuckHinge.position.set(0, W, 0);
+        var topTuckMesh = new THREE.Mesh(createTopTuckFlapGeo(L, tuckH), paperMat);
+        topTuckMesh.castShadow = true;
+        topTuckHinge.add(topTuckMesh);
+        topLidHinge.add(topTuckHinge);
+        boxRoot.add(topLidHinge);
+        hinges.topLid  = topLidHinge;
+        hinges.topTuck = topTuckHinge;
+
+        // ── 4. PANEL 2 (HÔNG 1: W × H) BẢN LỀ TẠI X = L CỦA PANEL 1 ──
+        var p2Hinge = new THREE.Group();
+        p2Hinge.position.set(L, 0, 0);
+        var p2Mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), paperMat);
+        p2Mesh.position.set(W / 2, H / 2, 0);
+        p2Mesh.castShadow = true;
+        p2Mesh.receiveShadow = true;
+        p2Hinge.add(p2Mesh);
+
+        // Tai bụi trên 1 (Top Dust Flap 1) tại đỉnh Panel 2
+        var p2TopDustHinge = new THREE.Group();
+        p2TopDustHinge.position.set(0, H, 0);
+        var p2TopDustMesh = new THREE.Mesh(createTopDustFlapGeo(W, dustH), paperMat);
+        p2TopDustMesh.castShadow = true;
+        p2TopDustHinge.add(p2TopDustMesh);
+        p2Hinge.add(p2TopDustHinge);
+        hinges.dust1 = p2TopDustHinge;
+
+        // Tai bụi đáy 1 (Bottom Dust Flap 1) tại đáy Panel 2 (Ảnh 1)
+        var p2BotDustHinge = new THREE.Group();
+        p2BotDustHinge.position.set(0, 0, 0);
+        var p2BotDustMesh = new THREE.Mesh(createBotDustFlapGeo(W, dustH), paperMat);
+        p2BotDustMesh.castShadow = true;
+        p2BotDustHinge.add(p2BotDustMesh);
+        p2Hinge.add(p2BotDustHinge);
+        hinges.botDust1 = p2BotDustHinge;
+
+        // ── 5. PANEL 3 (MẶT SAU: L × H) BẢN LỀ TẠI X = W CỦA PANEL 2 ──
+        var p3Hinge = new THREE.Group();
+        p3Hinge.position.set(W, 0, 0);
+        var p3Mesh = new THREE.Mesh(new THREE.PlaneGeometry(L, H), paperMat);
+        p3Mesh.position.set(L / 2, H / 2, 0);
+        p3Mesh.castShadow = true;
+        p3Mesh.receiveShadow = true;
+        p3Hinge.add(p3Mesh);
+
+        // Nắp đáy (Bottom Lid) tại đáy Panel 3 (Ảnh 1: Reverse Tuck so le)
+        var p3BotLidHinge = new THREE.Group();
+        p3BotLidHinge.position.set(0, 0, 0);
+        var p3BotLidMesh = new THREE.Mesh(new THREE.PlaneGeometry(L, W), paperMat);
+        p3BotLidMesh.position.set(L / 2, -W / 2, 0);
+        p3BotLidMesh.castShadow = true;
+        p3BotLidHinge.add(p3BotLidMesh);
+
+        // Lưỡi gài đáy (Bottom Tuck Flap) tại y = -W của nắp đáy
+        var p3BotTuckHinge = new THREE.Group();
+        p3BotTuckHinge.position.set(0, -W, 0);
+        var p3BotTuckMesh = new THREE.Mesh(createBotTuckFlapGeo(L, tuckH), paperMat);
+        p3BotTuckMesh.castShadow = true;
+        p3BotTuckHinge.add(p3BotTuckMesh);
+        p3BotLidHinge.add(p3BotTuckHinge);
+        p3Hinge.add(p3BotLidHinge);
+        hinges.botLid  = p3BotLidHinge;
+        hinges.botTuck = p3BotTuckHinge;
+
+        // ── 6. PANEL 4 (HÔNG 2: W × H) BẢN LỀ TẠI X = L CỦA PANEL 3 ──
+        var p4Hinge = new THREE.Group();
+        p4Hinge.position.set(L, 0, 0);
+        var p4Mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), paperMat);
+        p4Mesh.position.set(W / 2, H / 2, 0);
+        p4Mesh.castShadow = true;
+        p4Mesh.receiveShadow = true;
+        p4Hinge.add(p4Mesh);
+
+        // Tai bụi trên 2 (Top Dust Flap 2) tại đỉnh Panel 4 (Ảnh 1)
+        var p4TopDustHinge = new THREE.Group();
+        p4TopDustHinge.position.set(0, H, 0);
+        var p4TopDustMesh = new THREE.Mesh(createTopDustFlapGeo(W, dustH), paperMat);
+        p4TopDustMesh.castShadow = true;
+        p4TopDustHinge.add(p4TopDustMesh);
+        p4Hinge.add(p4TopDustHinge);
+        hinges.dust2 = p4TopDustHinge;
+
+        // Tai bụi đáy 2 (Bottom Dust Flap 2) tại đáy Panel 4 (Ảnh 1)
+        var p4BotDustHinge = new THREE.Group();
+        p4BotDustHinge.position.set(0, 0, 0);
+        var p4BotDustMesh = new THREE.Mesh(createBotDustFlapGeo(W, dustH), paperMat);
+        p4BotDustMesh.castShadow = true;
+        p4BotDustHinge.add(p4BotDustMesh);
+        p4Hinge.add(p4BotDustHinge);
+        hinges.botDust2 = p4BotDustHinge;
+
+        // Gắn lồng vào cây phân cấp
+        p3Hinge.add(p4Hinge);
+        p2Hinge.add(p3Hinge);
+        boxRoot.add(p2Hinge);
+
+        hinges.p2 = p2Hinge;
+        hinges.p3 = p3Hinge;
+        hinges.p4 = p4Hinge;
+
+        scene.add(boxRoot);
+        updateFoldingKinematics(state.sliderVal);
+      }
+
+      // ── ĐỘNG HỌC GẬP / MỞ HỘP TOÀN DIỆN TỪ KHUÔN BẾ 2D ĐẾN KHỐI 3D ──────────
+      function updateFoldingKinematics(val) {
+        if (!hinges.p2) return;
+
+        var t = val / 100.0; // 0.0 (Ouvrir - Phẳng) -> 1.0 (Fermer - Đóng kín)
+
+        function ease(p) {
+          p = Math.max(0, Math.min(1, p));
+          return p * p * (3 - 2 * p);
+        }
+
+        // Hộp đóng chiếm x∈[0,L], y∈[0,H], z∈[0,W]; mọi nắp/tai xoay VÀO TRONG
+        var HALF = Math.PI / 2;
+        var bodyP = ease(t / 0.45);
+        var bodyAngle = bodyP * HALF;
+        hinges.glue.rotation.y = bodyP * (HALF + 0.035);
+        hinges.p2.rotation.y   = -bodyAngle;
+        hinges.p3.rotation.y   = -bodyAngle;
+        hinges.p4.rotation.y   = -bodyAngle;
+
+        // Đáy: tai bụi → nắp đáy → lưỡi gài đáy
+        hinges.botDust1.rotation.x = ease((t - 0.42) / 0.14) * (HALF + 0.035);
+        if (hinges.botDust2) hinges.botDust2.rotation.x = ease((t - 0.42) / 0.14) * (HALF + 0.035);
+        hinges.botLid.rotation.x   = ease((t - 0.50) / 0.14) * HALF;
+        hinges.botTuck.rotation.x  = ease((t - 0.58) / 0.10) * (HALF + 0.07);
+
+        // Miệng trên: tai bụi → nắp → lưỡi gài
+        var tdP = ease((t - 0.70) / 0.12);
+        hinges.dust1.rotation.x = -tdP * (HALF + 0.035);
+        hinges.dust2.rotation.x = -tdP * (HALF + 0.035);
+        hinges.topLid.rotation.x  = ease((t - 0.78) / 0.14) * HALF;
+        hinges.topTuck.rotation.x = ease((t - 0.88) / 0.12) * (HALF + 0.07);
+
+        var L = state.L, W = state.W, H = state.H;
+        var offsetX = -L / 2 * bodyP - (1 - bodyP) * (L + W);
+        var offsetZ = -(W / 2) * bodyP;
+        boxRoot.position.set(offsetX, 0, offsetZ);
+      }
+
+      // ── CAMERA FIT & RESET ────────────────────────────────────────────────
+      function resetCamera() {
+        var maxD = Math.max(state.L, state.W, state.H);
+        var dist = maxD * 2.8;
+        // Góc phối cảnh Isometric nhìn từ trên xuống đẹp như Pacdora
+        camera.position.set(maxD * 1.35, maxD * 1.5, dist * 0.95);
+        controls.target.set(0, state.H * 0.5, 0);
+        camera.near = 1;
+        camera.far = maxD * 25;
+        camera.updateProjectionMatrix();
+        controls.update();
+      }
+
+      // ── RESIZE HANDLER ────────────────────────────────────────────────────
+      function onResize() {
+        var w = container.clientWidth;
+        var h = container.clientHeight;
+        if (w === 0 || h === 0) return;
+        renderer.setSize(w, h);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener("resize", onResize);
+
+      // ── ANIMATION LOOP ────────────────────────────────────────────────────
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // AutoPlay tự động mở/đóng lặp lại
+        if (state.autoPlay) {
+          state.sliderVal += state.autoPlayDir;
+          if (state.sliderVal <= 0) {
+            state.sliderVal = 0;
+            state.autoPlayDir = 0.6;
+          } else if (state.sliderVal >= 100) {
+            state.sliderVal = 100;
+            state.autoPlayDir = -0.6;
+          }
+          document.getElementById("slider-main").value = state.sliderVal;
+          updateFoldingKinematics(state.sliderVal);
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      // ── EVENT LISTENERS ───────────────────────────────────────────────────
+
+      // 1. Thanh trượt chính Ouvrir ────○──── Fermer (Ảnh số 2)
+      var slider = document.getElementById("slider-main");
+      slider.addEventListener("input", function () {
+        state.sliderVal = parseFloat(this.value);
+        state.autoPlay = false;
+        document.getElementById("btn-autoplay").classList.remove("active");
+        updateFoldingKinematics(state.sliderVal);
+      });
+
+      // 2. Huy hiệu 3D (Ảnh số 2)
+      document.getElementById("badge-3d").addEventListener("click", function () {
+        resetCamera();
+        showToast("Đã đặt lại góc nhìn 3D Pacdora!");
+      });
+
+      // 3. Reset Camera button
+      document.getElementById("btn-reset-cam").addEventListener("click", function () {
+        resetCamera();
+      });
+
+      // 4. AutoPlay button
+      var btnAuto = document.getElementById("btn-autoplay");
+      btnAuto.addEventListener("click", function () {
+        state.autoPlay = !state.autoPlay;
+        this.classList.toggle("active", state.autoPlay);
+        if (state.autoPlay) showToast("Đang tự động mô phỏng mở/đóng hộp...");
+      });
+
+      // 5. Chọn vật liệu giấy
+      document.querySelectorAll(".chip").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+          document.querySelectorAll(".chip").forEach(function (c) { c.classList.remove("active"); });
+          chip.classList.add("active");
+          state.material = chip.dataset.mat;
+          buildDynamicBox();
+          showToast("Đã đổi chất liệu: " + chip.textContent.trim());
+        });
+      });
+
+      // 6. Chế độ Mở nắp vs Trải phẳng
+      var btnModeLid = document.getElementById("btn-mode-lid");
+      var btnModeUnfold = document.getElementById("btn-mode-unfold");
+
+      btnModeLid.classList.add("active");
+
+      btnModeLid.addEventListener("click", function () {
+        state.mode = "lid";
+        btnModeLid.classList.add("active");
+        btnModeUnfold.classList.remove("active");
+        updateFoldingKinematics(state.sliderVal);
+        showToast("Chế độ: Mở / Đóng nắp hộp (Pacdora)");
+      });
+
+      btnModeUnfold.addEventListener("click", function () {
+        state.mode = "unfold";
+        btnModeUnfold.classList.add("active");
+        btnModeLid.classList.remove("active");
+        updateFoldingKinematics(state.sliderVal);
+        showToast("Chế độ: Trải phẳng 2D ⇄ Gấp 3D");
+      });
+
+      // 7. Nhập kích thước realtime
+      ["inp-L", "inp-W", "inp-H"].forEach(function (id) {
+        document.getElementById(id).addEventListener("input", function () {
+          var val = parseFloat(this.value);
+          if (!isNaN(val) && val > 0) {
+            if (id === "inp-L") state.L = val;
+            if (id === "inp-W") state.W = val;
+            if (id === "inp-H") state.H = val;
+            buildDynamicBox();
+          }
+        });
+      });
+
+      // 8. Chụp ảnh màn hình Mockup 3D
+      document.getElementById("btn-screenshot").addEventListener("click", function () {
+        renderer.render(scene, camera);
+        var url = canvas.toDataURL("image/png");
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "Pacdora3D_Mockup_" + state.L + "x" + state.W + "x" + state.H + "_" + state.material + ".png";
+        a.click();
+        showToast("✓ Đã tải về ảnh mockup 3D độ phân giải cao!");
+      });
+
+      // ── KHỞI CHẠY LẦN ĐẦU ────────────────────────────────────────────────
+      onResize();
+      buildDynamicBox();
+      resetCamera();
+      animate();
+
+    })();
+  </script>
+
+</body>
+</html>

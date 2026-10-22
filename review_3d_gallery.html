@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Packaging 3D Mockup Studio — Bóc Tách & Mô Phỏng Toàn Bộ Bộ Khuôn</title>
+  <style>
+    :root {
+      --bg: #121316;
+      --panel: #1a1b20;
+      --panel-border: #2c2d36;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --text: #f3f4f6;
+      --text-dim: #9ca3af;
+      --card-bg: #21222a;
+      --card-hover: #292a34;
+      --card-active: #1e3a8a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* TOP BAR */
+    #top-bar {
+      height: 52px;
+      background: #101114;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .badge {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #fff;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { background: #262730; color: #fff; }
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-color: #2563eb;
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #059669, #047857);
+      border-color: #059669;
+      color: #fff;
+    }
+    .btn-success:hover {
+      background: linear-gradient(135deg, #047857, #065f46);
+    }
+
+    /* MAIN LAYOUT */
+    #layout {
+      flex: 1;
+      display: flex;
+      height: calc(100vh - 52px);
+      overflow: hidden;
+    }
+
+    /* SIDEBAR THƯ VIỆN 28 MẪU */
+    #sidebar {
+      width: 360px;
+      background: var(--panel);
+      border-right: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .search-box {
+      width: 100%;
+      height: 32px;
+      background: #111215;
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 0 10px;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+    }
+    .search-box:focus { border-color: var(--accent); }
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .pill {
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: #252630;
+      color: var(--text-dim);
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .pill.active {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .models-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .model-card {
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .model-card:hover {
+      background: var(--card-hover);
+      border-color: #3b3d4a;
+    }
+    .model-card.active {
+      background: var(--card-active);
+      border-color: #3b82f6;
+    }
+    .m-num {
+      width: 26px;
+      height: 26px;
+      background: #111215;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .model-card.active .m-num {
+      background: #2563eb;
+      color: #fff;
+    }
+    .m-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .m-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .m-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .m-tag {
+      background: #2d2e3b;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    /* 3D VIEWPORT */
+    #viewport-pane {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 45%, #2a2c36 0%, #15161c 100%);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #canvas-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: grab;
+    }
+    #canvas-container:active { cursor: grabbing; }
+    #canvas3d { width: 100% !important; height: 100% !important; display: block; }
+
+    /* VIEWPORT OVERLAYS */
+    .view-info-badge {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      background: rgba(20, 21, 26, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      pointer-events: none;
+    }
+    .view-info-badge h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .view-info-badge p {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 3px;
+    }
+
+    /* PACDORA BOTTOM SLIDER PILL */
+    .slider-pill-wrap {
+      position: absolute;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .slider-pill {
+      pointer-events: auto;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 9999px;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      font-size: 14px;
+      font-weight: 600;
+      color: #111;
+    }
+    .slider-pill input[type="range"] {
+      -webkit-appearance: none;
+      width: 160px;
+      height: 5px;
+      background: #111;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    .slider-pill input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid #111;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    /* MATERIAL & CONTROLS TOOLBAR (Right Floating) */
+    .right-tools {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      background: rgba(20, 21, 26, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+    .tool-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .mat-chips {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .m-chip {
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: #252630;
+      font-size: 11px;
+      cursor: pointer;
+      text-align: center;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .m-chip.active {
+      border-color: #3b82f6;
+      background: #1e3a8a;
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* TOAST NOTIFICATION */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10b981;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.25s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* BATCH EXPORT MODAL */
+    #batch-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 150;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-box {
+      width: 440px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .progress-bar-wrap {
+      width: 100%;
+      height: 8px;
+      background: #111215;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #10b981);
+      transition: width 0.1s linear;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <div class="brand">
+      <span>📦 PACKAGING 3D STUDIO</span>
+      <span class="badge">28 MẪU KHUÔN PLUS</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="btn-toggle-wire">🕸️ Wireframe</button>
+      <button class="btn" id="btn-reset-cam">🔄 Góc nhìn chuẩn</button>
+      <button class="btn btn-primary" id="btn-export-current">📸 Xuất ảnh mẫu này (PNG)</button>
+      <button class="btn btn-success" id="btn-batch-export">⚡ Xuất toàn bộ 28 ảnh 3D</button>
+    </div>
+  </div>
+
+  <!-- MAIN LAYOUT -->
+  <div id="layout">
+
+    <!-- SIDEBAR 28 MẪU -->
+    <div id="sidebar">
+      <div class="sidebar-header">
+        <input type="text" class="search-box" id="inp-search" placeholder="🔍 Tìm kiếm mẫu hộp..."/>
+        <div class="filter-pills" id="filter-pills">
+          <div class="pill active" data-group="all">Tất cả (28)</div>
+          <div class="pill" data-group="tuck">Hộp nắp gài (8)</div>
+          <div class="pill" data-group="fastfood">Đồ ăn nhanh (4)</div>
+          <div class="pill" data-group="bag_env">Túi & Bì thư (4)</div>
+          <div class="pill" data-group="mooncake">Bánh trung thu (7)</div>
+          <div class="pill" data-group="cake">Bánh sinh nhật (1)</div>
+          <div class="pill" data-group="amduong">Âm Dương (4)</div>
+        </div>
+      </div>
+      <div class="models-list" id="models-list"></div>
+    </div>
+
+    <!-- 3D VIEWPORT -->
+    <div id="viewport-pane">
+      <div id="canvas-container">
+        <canvas id="canvas3d"></canvas>
+      </div>
+
+      <!-- Badge thông tin mẫu đang xem -->
+      <div class="view-info-badge">
+        <h2 id="cur-name">Hộp nắp gài đáy gài</h2>
+        <p id="cur-meta">Kích thước: 50×50×100mm | Dạng hộp: Reverse Tuck End</p>
+      </div>
+
+      <!-- Right Floating Tools -->
+      <div class="right-tools">
+        <span class="tool-label">Chất liệu giấy</span>
+        <div class="mat-chips">
+          <div class="m-chip active" data-mat="kraft">🤎 Kraft</div>
+          <div class="m-chip" data-mat="ivory">🤍 Ivory</div>
+          <div class="m-chip" data-mat="flute">📦 Sóng E</div>
+          <div class="m-chip" data-mat="black">🖤 Đen nhám</div>
+          <div class="m-chip" data-mat="gold">✨ Ép kim</div>
+          <div class="m-chip" data-mat="white">⚪ Trắng trơn</div>
+        </div>
+
+        <span class="tool-label" style="margin-top:6px">Góc quan sát</span>
+        <div class="btn-row">
+          <button class="btn" style="flex:1;padding:0" id="btn-view-iso">Isometric</button>
+          <button class="btn" style="flex:1;padding:0" id="btn-view-front">Trước</button>
+          <button class="btn" style="flex:1;padding:0" id="btn-view-top">Trên</button>
+        </div>
+      </div>
+
+      <!-- Pacdora Floating Slider Pill -->
+      <div class="slider-pill-wrap">
+        <div class="slider-pill">
+          <span>Trải phẳng</span>
+          <input type="range" id="slider-fold" min="0" max="100" value="100" step="0.5"/>
+          <span>Đóng kín</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast">Thông báo</div>
+
+  <!-- Batch Export Modal -->
+  <div id="batch-modal">
+    <div class="modal-box">
+      <h3 style="color:#fff;font-size:16px;">⚡ Đang xuất 28 ảnh Mockup 3D...</h3>
+      <p style="color:var(--text-dim);font-size:13px;" id="batch-status-text">Đang chuẩn bị dựng hình...</p>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="batch-progress-bar"></div>
+      </div>
+      <p style="font-size:11px;color:#6b7280;">Ảnh sẽ được lưu tự động với độ phân giải cao 1400×1000px.</p>
+    </div>
+  </div>
+
+  <!-- Three.js & OrbitControls -->
+  <script src="PackagingStudio3D/js/three.min.js"></script>
+  <script src="PackagingStudio3D/js/OrbitControls.js"></script>
+
+  <!-- Script logic mô phỏng 28 mẫu hộp -->
+  <script>
+  (function () {
+    // ═════════════════════════════════════════════════════════════════════════
+    // DANH SÁCH 28 MẪU BAO BÌ CHUẨN TỪ FILE TẤT CẢ BỘ KHUÔN HỘP PLUS.PDF
+    // ═════════════════════════════════════════════════════════════════════════
+    var MODELS = [
+      // 1. Nhóm HỘP NẮP GÀI & ĐÁY DÁN (8 mẫu góc trên bên trái)
+      {
+        id: '01_hop_nap_gai_day_gai',
+        name: 'Hộp nắp gài đáy gài',
+        group: 'tuck',
+        boxType: 'reverse-tuck',
+        drc: { L: 50, W: 50, H: 100 },
+        desc: 'Hộp gài so le (RTE) — Nắp trên và nắp dưới gài vào 2 mặt đối diện'
+      },
+      {
+        id: '02_hop_nap_gai_day_khoa',
+        name: 'Hộp nắp gài đáy khóa',
+        group: 'tuck',
+        boxType: 'crash-lock',
+        drc: { L: 60, W: 50, H: 100 },
+        desc: 'Hộp đáy gài khóa tự động (Auto Crash Lock Bottom) chịu lực nặng'
+      },
+      {
+        id: '03_hop_2_nap_cung_chieu_mep_dan',
+        name: 'Hộp 2 nắp cùng chiều mép dán',
+        group: 'tuck',
+        boxType: 'straight-tuck',
+        drc: { L: 60, W: 40, H: 120 },
+        desc: 'Hộp gài cùng chiều (STE) có mép dán góc bên thân'
+      },
+      {
+        id: '04_hop_2_nap_cung_chieu',
+        name: 'Hộp 2 nắp cùng chiều',
+        group: 'tuck',
+        boxType: 'straight-tuck',
+        drc: { L: 60, W: 40, H: 120 },
+        desc: 'Straight Tuck End (STE) — Cả nắp trên và nắp đáy gập cùng 1 hướng'
+      },
+      {
+        id: '05_hop_dep_day_dan',
+        name: 'Hộp dẹp - đáy dán',
+        group: 'tuck',
+        boxType: 'reverse-tuck',
+        drc: { L: 140, W: 35, H: 160 },
+        desc: 'Hộp dẹt dạng khay đứng mỏng cho vỉ thuốc, khẩu trang, mỹ phẩm'
+      },
+      {
+        id: '06_hop_day_dan',
+        name: 'Hộp đáy dán',
+        group: 'tuck',
+        boxType: 'reverse-tuck',
+        drc: { L: 90, W: 60, H: 130 },
+        desc: 'Hộp nắp gài trên, đáy dán cố định 1-2-3 chắc chắn'
+      },
+      {
+        id: '07_hop_chop_co_quai_xach',
+        name: 'Hộp chóp có quai xách',
+        group: 'tuck',
+        boxType: 'gable-box',
+        drc: { L: 140, W: 90, H: 150 },
+        desc: 'Hộp chóp mái nhà có quai xách gài đan chéo (Gable Handle Box)'
+      },
+      {
+        id: '08_thung_carton',
+        name: 'Thùng carton',
+        group: 'tuck',
+        boxType: 'mailer-box',
+        drc: { L: 200, W: 140, H: 60 },
+        desc: 'Thùng carton gập nắp gài tai khóa (FEFCO 0427 / Mailer Box)'
+      },
+
+      // 2. Nhóm TÚI GIẤY & BÌ THƯ (4 mẫu)
+      {
+        id: '09_tui_giay_co_nap',
+        name: 'Túi giấy có nắp',
+        group: 'bag_env',
+        boxType: 'bag-with-lid',
+        drc: { L: 250, W: 100, H: 300 },
+        desc: 'Túi giấy kraft có nắp đậy gập phía trên kèm quai xách'
+      },
+      {
+        id: '10_tui_giay_ko_co_nap',
+        name: 'Túi giấy không có nắp',
+        group: 'bag_env',
+        boxType: 'tote-bag',
+        drc: { L: 250, W: 100, H: 320 },
+        desc: 'Túi giấy xách tay tiêu chuẩn đục lỗ xỏ dây quai xoắn'
+      },
+      {
+        id: '11_bi_thu_12x22',
+        name: 'Bì thư 12x22',
+        group: 'bag_env',
+        boxType: 'envelope',
+        drc: { L: 220, W: 120, H: 10 },
+        desc: 'Phong bì thư văn phòng chuẩn 12×22cm nắp dán keo'
+      },
+      {
+        id: '12_bi_thu_25x34',
+        name: 'Bì thư 25x34',
+        group: 'bag_env',
+        boxType: 'envelope',
+        drc: { L: 340, W: 250, H: 15 },
+        desc: 'Phong bì tài liệu / Catalogue A4+ chuẩn 25×34cm'
+      },
+
+      // 3. Nhóm COMBO ĐỒ ĂN NHANH (4 mẫu)
+      {
+        id: '13_hop_banh_hamburger',
+        name: 'Hộp bánh Hamburger',
+        group: 'fastfood',
+        boxType: 'burger-box',
+        drc: { L: 95, W: 95, H: 70 },
+        desc: 'Hộp Hamburger Clamshell gập liền thân có lưỡi khóa mặt trước (9.5×9.5×7cm)'
+      },
+      {
+        id: '14_hop_dung_khoai_tay_chien',
+        name: 'Hộp đựng khoai tây chiên',
+        group: 'fastfood',
+        boxType: 'fries-box',
+        drc: { L: 70, W: 50, H: 95 },
+        desc: 'Khay chóp xòe đựng khoai tây chiên / gà nugget vát lưng cao'
+      },
+      {
+        id: '15_hop_ga_vuong_nap_gap',
+        name: 'Hộp gà vuông - nắp gập',
+        group: 'fastfood',
+        boxType: 'reverse-tuck',
+        drc: { L: 130, W: 130, H: 60 },
+        desc: 'Hộp gà rán nắp gập vuông đáy khóa tiện lợi (13×13×6cm)'
+      },
+      {
+        id: '16_tui_dung_ga_ran',
+        name: 'Túi đựng gà rán',
+        group: 'fastfood',
+        boxType: 'tote-bag',
+        drc: { L: 200, W: 100, H: 300 },
+        desc: 'Túi giấy thấm dầu đựng gà rán khổ trải 62×37cm (20×10×30cm)'
+      },
+
+      // 4. Nhóm HỘP BÁNH SINH NHẬT (1 mẫu)
+      {
+        id: '17_hop_banh_sinh_nhat',
+        name: 'Hộp bánh sinh nhật',
+        group: 'cake',
+        boxType: 'cake-box',
+        drc: { L: 260, W: 260, H: 180 },
+        desc: 'Hộp bánh kem quai xách chốt đan chéo + Cửa sổ kính mica trong suốt (26×26×18cm)'
+      },
+
+      // 5. Nhóm BỘ HỘP BÁNH TRUNG THU NẮP RÚT (6 chi tiết)
+      {
+        id: '18_vo_hop_me_nap_rut',
+        name: 'Vỏ hộp mẹ dạng ống rút',
+        group: 'mooncake',
+        boxType: 'sleeve-drawer',
+        drc: { L: 320, W: 255, H: 75 },
+        desc: 'Ống bao ngoài hộp mẹ dạng rút (Outer Sliding Sleeve)'
+      },
+      {
+        id: '19_khay_day_hop_me',
+        name: 'Khay đáy hộp mẹ',
+        group: 'mooncake',
+        boxType: 'tray',
+        drc: { L: 315, W: 250, H: 72 },
+        desc: 'Khay đáy ngăn kéo lồng bên trong vỏ ống rút'
+      },
+      {
+        id: '20_khay_dinh_hinh_4_o',
+        name: 'Khay định hình 4 ô',
+        group: 'mooncake',
+        boxType: 'divider-tray',
+        drc: { L: 305, W: 240, H: 45 },
+        desc: 'Khay ngăn chia 4 ô đựng bánh trung thu cao cấp'
+      },
+      {
+        id: '21_hop_con_trung_thu',
+        name: 'Hộp con đựng bánh trung thu',
+        group: 'mooncake',
+        boxType: 'reverse-tuck',
+        drc: { L: 85, W: 85, H: 55 },
+        desc: 'Hộp con đựng 1 bánh nắp gài vuông vức (8.5×8.5×5.5cm)'
+      },
+      {
+        id: '22_hop_tra',
+        name: 'Hộp trà trung thu',
+        group: 'mooncake',
+        boxType: 'reverse-tuck',
+        drc: { L: 75, W: 75, H: 140 },
+        desc: 'Hộp trụ đứng đựng trà đi kèm bộ trung thu (7.5×7.5×14cm)'
+      },
+      {
+        id: '23_combo_trung_thu_full',
+        name: 'COMBO Bộ hộp trung thu (Ráp hoàn chỉnh)',
+        group: 'mooncake',
+        boxType: 'combo-mooncake',
+        drc: { L: 320, W: 255, H: 75 },
+        desc: 'Mô phỏng phối cảnh toàn bộ vỏ hộp rút mở hờ lộ 4 hộp con và hộp trà bên trong'
+      },
+
+      // 6. Nhóm HỘP BÁNH TRUNG THU 2 BÁNH (1 mẫu)
+      {
+        id: '24_hop_trung_thu_2_banh',
+        name: 'Hộp bánh trung thu 2 bánh',
+        group: 'mooncake',
+        boxType: 'reverse-tuck',
+        drc: { L: 180, W: 95, H: 60 },
+        desc: 'Hộp chữ nhật nắp gài chứa 2 hộp bánh con (18×9.5×6cm)'
+      },
+
+      // 7. Nhóm BỘ HỘP ÂM DƯƠNG KÈM TÚI (4 mẫu)
+      {
+        id: '25_bo_am_duong_day_hop',
+        name: 'Đáy hộp âm dương',
+        group: 'amduong',
+        boxType: 'tray',
+        drc: { L: 370, W: 300, H: 70 },
+        desc: 'Khay đáy hộp âm dương cứng cáp (DRC: 37×30×7cm)'
+      },
+      {
+        id: '26_bo_am_duong_nap_hop',
+        name: 'Nắp hộp âm dương',
+        group: 'amduong',
+        boxType: 'tray',
+        drc: { L: 375, W: 305, H: 40 },
+        desc: 'Nắp hộp âm dương úp ngoài lọt lòng (DRC: 37.5×30.5×4cm)'
+      },
+      {
+        id: '27_bo_am_duong_tui_giay',
+        name: 'Túi giấy xách ngoài (Âm Dương)',
+        group: 'amduong',
+        boxType: 'tote-bag',
+        drc: { L: 385, W: 80, H: 315 },
+        desc: 'Túi giấy quà tặng đồng bộ đựng trọn hộp âm dương (38.5×8×31.5cm)'
+      },
+      {
+        id: '28_combo_am_duong_full',
+        name: 'COMBO Bộ hộp Âm Dương + Túi (Ráp hoàn chỉnh)',
+        group: 'amduong',
+        boxType: 'combo-amduong',
+        drc: { L: 385, W: 305, H: 315 },
+        desc: 'Phối cảnh 3D hoàn chỉnh gồm Đáy hộp, Nắp đậy hờ và Túi giấy đặt cạnh nhau'
+      }
+    ];
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // THREE.JS SETUP & STUDIO ENVIRONMENT
+    // ═════════════════════════════════════════════════════════════════════════
+    var container = document.getElementById('canvas-container');
+    var canvas = document.getElementById('canvas3d');
+
+    var renderer = new THREE.WebGLRenderer({
+      canvas: canvas,
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
+    var controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 + 0.05;
+
+    // Ánh sáng Studio 3 điểm
+    var ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
+    scene.add(ambientLight);
+
+    var dirLight1 = new THREE.DirectionalLight(0xfff8f0, 0.95);
+    dirLight1.position.set(250, 450, 300);
+    dirLight1.castShadow = true;
+    dirLight1.shadow.mapSize.width = 2048;
+    dirLight1.shadow.mapSize.height = 2048;
+    dirLight1.shadow.camera.near = 10;
+    dirLight1.shadow.camera.far = 1500;
+    var d = 300;
+    dirLight1.shadow.camera.left = -d;
+    dirLight1.shadow.camera.right = d;
+    dirLight1.shadow.camera.top = d;
+    dirLight1.shadow.camera.bottom = -d;
+    dirLight1.shadow.bias = -0.0005;
+    scene.add(dirLight1);
+
+    var dirLight2 = new THREE.DirectionalLight(0xdbeafe, 0.45);
+    dirLight2.position.set(-280, 200, -200);
+    scene.add(dirLight2);
+
+    var softLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    softLight.position.set(0, -100, 200);
+    scene.add(softLight);
+
+    // Mặt sàn đổ bóng
+    var shadowGeo = new THREE.PlaneGeometry(2500, 2500);
+    var shadowMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+    var shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
+    shadowPlane.rotation.x = -Math.PI / 2;
+    shadowPlane.position.y = -0.1;
+    shadowPlane.receiveShadow = true;
+    scene.add(shadowPlane);
+
+    // Root Group chứa mô hình 3D
+    var currentModelGroup = new THREE.Group();
+    scene.add(currentModelGroup);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TEXTURE & VẬT LIỆU GIẤY CHUYÊN NGHIỆP
+    // ═════════════════════════════════════════════════════════════════════════
+    function makePaperTexture(type) {
+      var cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 512;
+      var ctx = cv.getContext('2d');
+
+      var baseColor = '#e5cca8', grainColor = 'rgba(70,40,15,0.06)';
+      if (type === 'ivory') { baseColor = '#faf9f5'; grainColor = 'rgba(0,0,0,0.025)'; }
+      else if (type === 'flute') { baseColor = '#cfb48f'; grainColor = 'rgba(40,20,5,0.08)'; }
+      else if (type === 'black') { baseColor = '#242426'; grainColor = 'rgba(255,255,255,0.04)'; }
+      else if (type === 'gold') { baseColor = '#e2ba55'; grainColor = 'rgba(255,255,255,0.15)'; }
+      else if (type === 'white') { baseColor = '#ffffff'; grainColor = 'rgba(0,0,0,0.015)'; }
+
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Noise grain
+      var imgData = ctx.getImageData(0, 0, 512, 512);
+      var data = imgData.data;
+      for (var i = 0; i < data.length; i += 4) {
+        var noise = (Math.random() - 0.5) * (type === 'kraft' ? 18 : 6);
+        data[i] = Math.min(255, Math.max(0, data[i] + noise));
+        data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise));
+        data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise));
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      var tex = new THREE.CanvasTexture(cv);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(2, 2);
+      return tex;
+    }
+
+    var textures = {
+      kraft: makePaperTexture('kraft'),
+      ivory: makePaperTexture('ivory'),
+      flute: makePaperTexture('flute'),
+      black: makePaperTexture('black'),
+      gold: makePaperTexture('gold'),
+      white: makePaperTexture('white')
+    };
+
+    var currentMaterialName = 'kraft';
+    var isWireframe = false;
+
+    function getPaperMaterial(subType, side) {
+      var tex = textures[currentMaterialName] || textures.kraft;
+      var rough = 0.72, metal = 0.04;
+      if (currentMaterialName === 'ivory') { rough = 0.55; }
+      else if (currentMaterialName === 'gold') { rough = 0.28; metal = 0.85; }
+      else if (currentMaterialName === 'black') { rough = 0.85; }
+
+      return new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: rough,
+        metalness: metal,
+        side: side || THREE.DoubleSide,
+        wireframe: isWireframe
+      });
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // THUẬT TOÁN DỰNG HÌNH HỌC 3D VÀ ĐÓNG MỞ (KINEMATICS) CHO TỪNG LOẠI HỘP
+    // ═════════════════════════════════════════════════════════════════════════
+    var state = {
+      activeModel: MODELS[0],
+      sliderVal: 100 // 100 = Đóng kín, 0 = Trải phẳng
+    };
+
+    // Helper tạo Mesh hộp chữ nhật cơ bản
+    function createBoxPanel(w, h, mat) {
+      var shape = new THREE.Shape();
+      shape.moveTo(0, 0);
+      shape.lineTo(w, 0);
+      shape.lineTo(w, h);
+      shape.lineTo(0, h);
+      shape.closePath();
+      var geo = new THREE.ShapeGeometry(shape);
+      var m = new THREE.Mesh(geo, mat || getPaperMaterial());
+      m.castShadow = m.receiveShadow = true;
+      return m;
+    }
+
+    // Xây dựng mô hình 3D thực tế theo loại hộp
+    function build3DModel(model, tFold) {
+      var grp = new THREE.Group();
+      var t = tFold / 100.0; // 0 -> 1
+      var drc = model.drc;
+      var L = drc.L, W = drc.W, H = drc.H;
+      var mat = getPaperMaterial();
+
+      function ease(p) { p = Math.max(0, Math.min(1, p)); return p * p * (3 - 2 * p); }
+      var bAngle = ease(t / 0.45) * (Math.PI / 2);
+      var lidAngle = ease((t - 0.45) / 0.35) * (Math.PI / 2);
+      var tuckAngle = ease((t - 0.75) / 0.25) * (Math.PI / 2 + 0.05);
+
+      // ── 1. HỘP GÀI SO LE (Reverse Tuck End) & ĐÁY KHÓA (Crash-Lock) ──
+      if (model.boxType === 'reverse-tuck' || model.boxType === 'straight-tuck' || model.boxType === 'crash-lock') {
+        // Mặt 1 (Front)
+        var p1 = createBoxPanel(L, H, mat);
+        grp.add(p1);
+
+        // Mép dán bên trái
+        var glueTab = createBoxPanel(15, H, mat);
+        glueTab.position.set(0, 0, 0);
+        glueTab.rotation.y = bAngle * 1.02;
+        p1.add(glueTab);
+
+        // Mặt 2 (Hông phải)
+        var p2Pivot = new THREE.Group();
+        p2Pivot.position.set(L, 0, 0);
+        p1.add(p2Pivot);
+        p2Pivot.rotation.y = -bAngle;
+        var p2 = createBoxPanel(W, H, mat);
+        p2Pivot.add(p2);
+
+        // Mặt 3 (Back)
+        var p3Pivot = new THREE.Group();
+        p3Pivot.position.set(W, 0, 0);
+        p2Pivot.add(p3Pivot);
+        p3Pivot.rotation.y = -bAngle;
+        var p3 = createBoxPanel(L, H, mat);
+        p3Pivot.add(p3);
+
+        // Mặt 4 (Hông trái)
+        var p4Pivot = new THREE.Group();
+        p4Pivot.position.set(L, 0, 0);
+        p3Pivot.add(p4Pivot);
+        p4Pivot.rotation.y = -bAngle;
+        var p4 = createBoxPanel(W, H, mat);
+        p4Pivot.add(p4);
+
+        // Nắp trên (Top Lid)
+        var topPivot = new THREE.Group();
+        topPivot.position.set(0, H, 0);
+        p1.add(topPivot);
+        topPivot.rotation.x = -lidAngle;
+        var topLid = createBoxPanel(L, W, mat);
+        topPivot.add(topLid);
+
+        // Lưỡi gài nắp trên (Tuck Flap with notches)
+        var topTuckPivot = new THREE.Group();
+        topTuckPivot.position.set(0, W, 0);
+        topLid.add(topTuckPivot);
+        topTuckPivot.rotation.x = -tuckAngle;
+        var topTuck = createBoxPanel(L, Math.min(W * 0.45, 25), mat);
+        topTuckPivot.add(topTuck);
+
+        // Đáy hộp (Bottom)
+        if (model.boxType === 'crash-lock') {
+          // Đáy khóa tự động (2 tai chốt xéo vát 45 độ)
+          var b1Pivot = new THREE.Group();
+          b1Pivot.position.set(0, 0, 0);
+          p1.add(b1Pivot);
+          b1Pivot.rotation.x = lidAngle;
+          var b1 = createBoxPanel(L, W * 0.65, mat);
+          b1Pivot.add(b1);
+
+          var b3Pivot = new THREE.Group();
+          b3Pivot.position.set(0, 0, 0);
+          p3.add(b3Pivot);
+          b3Pivot.rotation.x = lidAngle;
+          var b3 = createBoxPanel(L, W * 0.65, mat);
+          b3Pivot.add(b3);
+        } else {
+          // Đáy gài so le (nắp đáy gắn vào p3)
+          var targetBottomPanel = (model.boxType === 'straight-tuck') ? p1 : p3;
+          var botPivot = new THREE.Group();
+          botPivot.position.set(0, 0, 0);
+          targetBottomPanel.add(botPivot);
+          botPivot.rotation.x = lidAngle;
+          var botLid = createBoxPanel(L, W, mat);
+          botLid.position.set(0, -W, 0);
+          botPivot.add(botLid);
+
+          var botTuckPivot = new THREE.Group();
+          botTuckPivot.position.set(0, 0, 0);
+          botLid.add(botTuckPivot);
+          botTuckPivot.rotation.x = tuckAngle;
+          var botTuck = createBoxPanel(L, Math.min(W * 0.45, 25), mat);
+          botTuck.position.set(0, -Math.min(W * 0.45, 25), 0);
+          botTuckPivot.add(botTuck);
+        }
+
+        // Căn giữa hộp
+        var bodyP = ease(t / 0.45);
+        grp.position.set(-L / 2 * bodyP, 0, -W / 2 * bodyP);
+      }
+
+      // ── 2. HỘP KHAY ÂM DƯƠNG (Tray Lid & Base) ──
+      else if (model.boxType === 'tray') {
+        var base = createBoxPanel(L, W, mat);
+        grp.add(base);
+
+        var wallAngle = ease(t) * (Math.PI / 2);
+
+        // 4 vách hông gập lên 90 độ
+        var wFront = createBoxPanel(L, H, mat);
+        wFront.rotation.x = wallAngle;
+        base.add(wFront);
+
+        var wBackPivot = new THREE.Group();
+        wBackPivot.position.set(0, W, 0);
+        base.add(wBackPivot);
+        wBackPivot.rotation.x = -wallAngle;
+        var wBack = createBoxPanel(L, H, mat);
+        wBackPivot.add(wBack);
+
+        var wLeftPivot = new THREE.Group();
+        wLeftPivot.position.set(0, 0, 0);
+        base.add(wLeftPivot);
+        wLeftPivot.rotation.y = -wallAngle;
+        var wLeft = createBoxPanel(H, W, mat);
+        wLeftPivot.add(wLeft);
+
+        var wRightPivot = new THREE.Group();
+        wRightPivot.position.set(L, 0, 0);
+        base.add(wRightPivot);
+        wRightPivot.rotation.y = wallAngle;
+        var wRight = createBoxPanel(H, W, mat);
+        wRightPivot.add(wRight);
+
+        // Đặt đáy nằm phẳng trên sàn
+        base.rotation.x = -Math.PI / 2;
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 3. THÙNG CARTON MAILER BOX (FEFCO 0427) ──
+      else if (model.boxType === 'mailer-box') {
+        var mBase = createBoxPanel(L, W, mat);
+        grp.add(mBase);
+        mBase.rotation.x = -Math.PI / 2;
+
+        var mWallAngle = ease(t * 1.2) * (Math.PI / 2);
+        var mLidAngle = ease((t - 0.4) / 0.6) * (Math.PI / 2 + 0.05);
+
+        // Vách trước cuộn đôi
+        var mFront = createBoxPanel(L, H, mat);
+        mFront.rotation.x = mWallAngle;
+        mBase.add(mFront);
+
+        // Vách sau nối nắp liền
+        var mBackPivot = new THREE.Group();
+        mBackPivot.position.set(0, W, 0);
+        mBase.add(mBackPivot);
+        mBackPivot.rotation.x = -mWallAngle;
+        var mBack = createBoxPanel(L, H, mat);
+        mBackPivot.add(mBack);
+
+        // Nắp trên gắn vào đỉnh vách sau
+        var mLidPivot = new THREE.Group();
+        mLidPivot.position.set(0, H, 0);
+        mBackPivot.add(mLidPivot);
+        mLidPivot.rotation.x = -mLidAngle;
+        var mLid = createBoxPanel(L, W, mat);
+        mLidPivot.add(mLid);
+
+        // 2 tai khóa hông của nắp (Lid wings)
+        var wingL = createBoxPanel(H * 0.9, W, mat);
+        wingL.rotation.y = Math.PI / 2;
+        mLid.add(wingL);
+
+        var wingRPivot = new THREE.Group();
+        wingRPivot.position.set(L, 0, 0);
+        mLid.add(wingRPivot);
+        wingRPivot.rotation.y = -Math.PI / 2;
+        var wingR = createBoxPanel(H * 0.9, W, mat);
+        wingRPivot.add(wingR);
+
+        // Lưỡi gài trước nắp
+        var mTuckPivot = new THREE.Group();
+        mTuckPivot.position.set(0, W, 0);
+        mLid.add(mTuckPivot);
+        mTuckPivot.rotation.x = -Math.PI / 2;
+        var mTuck = createBoxPanel(L, H * 0.85, mat);
+        mTuckPivot.add(mTuck);
+
+        // 2 Vách hông cuộn đôi của đáy
+        var mSideL = createBoxPanel(H, W, mat);
+        mSideL.rotation.y = -mWallAngle;
+        mBase.add(mSideL);
+
+        var mSideRPivot = new THREE.Group();
+        mSideRPivot.position.set(L, 0, 0);
+        mBase.add(mSideRPivot);
+        mSideRPivot.rotation.y = mWallAngle;
+        var mSideR = createBoxPanel(H, W, mat);
+        mSideRPivot.add(mSideR);
+
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 4. HỘP BÁNH HAMBURGER (Clamshell) ──
+      else if (model.boxType === 'burger-box') {
+        var baseTray = createBoxPanel(L, W, mat);
+        grp.add(baseTray);
+        baseTray.rotation.x = -Math.PI / 2;
+
+        var bWall = ease(t * 1.1) * (Math.PI / 2 - 0.1);
+        var bLidA = ease((t - 0.3) / 0.7) * (Math.PI / 2 + 0.12);
+
+        // 4 vách đáy hơi vát góc
+        var bFront = createBoxPanel(L, H * 0.55, mat);
+        bFront.rotation.x = bWall;
+        baseTray.add(bFront);
+
+        var bLeft = createBoxPanel(H * 0.55, W, mat);
+        bLeft.rotation.y = -bWall;
+        baseTray.add(bLeft);
+
+        var bRightPivot = new THREE.Group();
+        bRightPivot.position.set(L, 0, 0);
+        baseTray.add(bRightPivot);
+        bRightPivot.rotation.y = bWall;
+        var bRight = createBoxPanel(H * 0.55, W, mat);
+        bRightPivot.add(bRight);
+
+        // Vách sau bản lề nối lên nắp vòm
+        var bBackPivot = new THREE.Group();
+        bBackPivot.position.set(0, W, 0);
+        baseTray.add(bBackPivot);
+        bBackPivot.rotation.x = -bWall;
+        var bBack = createBoxPanel(L, H * 0.55, mat);
+        bBackPivot.add(bBack);
+
+        // Nắp trên (Top Lid Clamshell)
+        var bLidPivot = new THREE.Group();
+        bLidPivot.position.set(0, H * 0.55, 0);
+        bBackPivot.add(bLidPivot);
+        bLidPivot.rotation.x = -bLidA;
+        var bTopLid = createBoxPanel(L, W, mat);
+        bLidPivot.add(bTopLid);
+
+        // Lưỡi khóa trước nắp úp xuống
+        var bLockPivot = new THREE.Group();
+        bLockPivot.position.set(0, W, 0);
+        bTopLid.add(bLockPivot);
+        bLockPivot.rotation.x = -Math.PI / 2;
+        var bLock = createBoxPanel(L, 20, mat);
+        bLockPivot.add(bLock);
+
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 5. HỘP CHÓP CÓ QUAI XÁCH (Gable Box) ──
+      else if (model.boxType === 'gable-box') {
+        var gFront = createBoxPanel(L, H * 0.65, mat);
+        grp.add(gFront);
+
+        // Hông trái và phải có nếp gấp tam giác (gusset)
+        var gLPivot = new THREE.Group();
+        gFront.add(gLPivot);
+        gLPivot.rotation.y = -Math.PI / 2;
+        var gL = createBoxPanel(W, H * 0.65, mat);
+        gLPivot.add(gL);
+
+        var gRPivot = new THREE.Group();
+        gRPivot.position.set(L, 0, 0);
+        gFront.add(gRPivot);
+        gRPivot.rotation.y = Math.PI / 2;
+        var gR = createBoxPanel(W, H * 0.65, mat);
+        gRPivot.add(gR);
+
+        // Mặt sau
+        var gBPivot = new THREE.Group();
+        gRPivot.add(gBPivot);
+        gBPivot.position.set(W, 0, 0);
+        gBPivot.rotation.y = Math.PI / 2;
+        var gBack = createBoxPanel(L, H * 0.65, mat);
+        gBPivot.add(gBack);
+
+        // Mái chóp trước vát 45 độ lên đỉnh
+        var roofFront = createBoxPanel(L, H * 0.45, mat);
+        roofFront.position.set(0, H * 0.65, 0);
+        roofFront.rotation.x = -Math.PI / 4 * ease(t);
+        gFront.add(roofFront);
+
+        // Mái chóp sau vát 45 độ đối xứng
+        var roofBack = createBoxPanel(L, H * 0.45, mat);
+        roofBack.position.set(0, H * 0.65, 0);
+        roofBack.rotation.x = Math.PI / 4 * ease(t);
+        gBack.add(roofBack);
+
+        // Quai xách đỉnh chóp đan vào nhau
+        var handleF = createBoxPanel(L * 0.7, 35, mat);
+        handleF.position.set(L * 0.15, H * 0.45, 0);
+        roofFront.add(handleF);
+
+        grp.position.set(-L / 2, 0, -W / 2);
+      }
+
+      // ── 6. TÚI GIẤY (Tote Bag & Bag With Lid) ──
+      else if (model.boxType === 'tote-bag' || model.boxType === 'bag-with-lid') {
+        var tFront = createBoxPanel(L, H, mat);
+        grp.add(tFront);
+
+        var sideGussetAngle = Math.PI / 2;
+        var tLPivot = new THREE.Group();
+        tFront.add(tLPivot);
+        tLPivot.rotation.y = -sideGussetAngle;
+        var tL = createBoxPanel(W, H, mat);
+        tLPivot.add(tL);
+
+        var tRPivot = new THREE.Group();
+        tRPivot.position.set(L, 0, 0);
+        tFront.add(tRPivot);
+        tRPivot.rotation.y = sideGussetAngle;
+        var tR = createBoxPanel(W, H, mat);
+        tRPivot.add(tR);
+
+        var tBPivot = new THREE.Group();
+        tRPivot.add(tBPivot);
+        tBPivot.position.set(W, 0, 0);
+        tBPivot.rotation.y = sideGussetAngle;
+        var tBack = createBoxPanel(L, H, mat);
+        tBPivot.add(tBack);
+
+        // Đáy túi gập phẳng
+        var tBase = createBoxPanel(L, W, mat);
+        tBase.rotation.x = Math.PI / 2;
+        tFront.add(tBase);
+
+        // Dây xách quai xoắn
+        var ropeMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+        var ropeCurveF = new THREE.CubicBezierCurve3(
+          new THREE.Vector3(L * 0.28, H - 10, 2),
+          new THREE.Vector3(L * 0.28, H + 65, 10),
+          new THREE.Vector3(L * 0.72, H + 65, 10),
+          new THREE.Vector3(L * 0.72, H - 10, 2)
+        );
+        var ropeGeoF = new THREE.TubeGeometry(ropeCurveF, 24, 3.5, 8, false);
+        var ropeMeshF = new THREE.Mesh(ropeGeoF, ropeMat);
+        tFront.add(ropeMeshF);
+
+        var ropeCurveB = new THREE.CubicBezierCurve3(
+          new THREE.Vector3(L * 0.28, H - 10, -2),
+          new THREE.Vector3(L * 0.28, H + 65, -10),
+          new THREE.Vector3(L * 0.72, H + 65, -10),
+          new THREE.Vector3(L * 0.72, H - 10, -2)
+        );
+        var ropeGeoB = new THREE.TubeGeometry(ropeCurveB, 24, 3.5, 8, false);
+        var ropeMeshB = new THREE.Mesh(ropeGeoB, ropeMat);
+        tBack.add(ropeMeshB);
+
+        // Nắp gập nếu là túi có nắp
+        if (model.boxType === 'bag-with-lid') {
+          var bagLidPivot = new THREE.Group();
+          bagLidPivot.position.set(0, H, 0);
+          tBack.add(bagLidPivot);
+          bagLidPivot.rotation.x = -Math.PI / 2 * ease(t);
+          var bagLid = createBoxPanel(L, W + 35, mat);
+          bagLidPivot.add(bagLid);
+        }
+
+        grp.position.set(-L / 2, 0, -W / 2);
+      }
+
+      // ── 7. BÌ THƯ (Envelope 12x22 & 25x34) ──
+      else if (model.boxType === 'envelope') {
+        var envFront = createBoxPanel(L, W, mat);
+        grp.add(envFront);
+
+        // Nắp sau gập 180 độ
+        var envBack = createBoxPanel(L, W * 0.9, mat);
+        envBack.position.set(0, 0, 0.5);
+        envFront.add(envBack);
+
+        // Nắp niêm phong tam giác trên đỉnh
+        var envFlapPivot = new THREE.Group();
+        envFlapPivot.position.set(0, W, 0.6);
+        envFront.add(envFlapPivot);
+        envFlapPivot.rotation.x = -Math.PI * ease(t);
+        var flapShape = new THREE.Shape();
+        flapShape.moveTo(0, 0);
+        flapShape.lineTo(L, 0);
+        flapShape.lineTo(L / 2, Math.min(W * 0.5, 55));
+        flapShape.closePath();
+        var flapMesh = new THREE.Mesh(new THREE.ShapeGeometry(flapShape), mat);
+        envFlapPivot.add(flapMesh);
+
+        envFront.rotation.x = -Math.PI / 2;
+        grp.position.set(-L / 2, 1, W / 2);
+      }
+
+      // ── 8. HỘP BÁNH SINH NHẬT CÓ QUAI XÁCH & CỬA SỔ KÍNH MICA ──
+      else if (model.boxType === 'cake-box') {
+        var cBase = createBoxPanel(L, W, mat);
+        grp.add(cBase);
+        cBase.rotation.x = -Math.PI / 2;
+
+        // 4 vách hộp bánh
+        var cF = createBoxPanel(L, H, mat);
+        cF.rotation.x = Math.PI / 2;
+        cBase.add(cF);
+
+        // Cửa sổ kính Mica trong suốt trên mặt trước
+        var winMat = new THREE.MeshPhysicalMaterial({
+          color: 0xffffff,
+          transmission: 0.95,
+          opacity: 1,
+          transparent: true,
+          roughness: 0.05,
+          ior: 1.5
+        });
+        var winMesh = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.55, H * 0.5), winMat);
+        winMesh.position.set(L / 2, H * 0.45, 0.5);
+        cF.add(winMesh);
+
+        var cB = createBoxPanel(L, H, mat);
+        cB.position.set(0, W, 0);
+        cB.rotation.x = -Math.PI / 2;
+        cBase.add(cB);
+
+        var cL = createBoxPanel(H, W, mat);
+        cL.rotation.y = -Math.PI / 2;
+        cBase.add(cL);
+
+        var cR = createBoxPanel(H, W, mat);
+        cR.position.set(L, 0, 0);
+        cR.rotation.y = Math.PI / 2;
+        cBase.add(cR);
+
+        // 2 cánh quai xách trên đỉnh khép lại
+        var cHandleF = createBoxPanel(L, H * 0.35, mat);
+        cHandleF.position.set(0, H, 0);
+        cHandleF.rotation.x = -Math.PI / 4 * ease(t);
+        cF.add(cHandleF);
+
+        var cHandleB = createBoxPanel(L, H * 0.35, mat);
+        cHandleB.position.set(0, H, 0);
+        cHandleB.rotation.x = Math.PI / 4 * ease(t);
+        cB.add(cHandleB);
+
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 9. HỘP ĐỰNG KHOAI TÂY CHIÊN (Fries Scoop) ──
+      else if (model.boxType === 'fries-box') {
+        var frBase = createBoxPanel(L * 0.65, W * 0.7, mat);
+        grp.add(frBase);
+        frBase.rotation.x = -Math.PI / 2;
+
+        // Vách trước lượn sóng thấp
+        var frFront = createBoxPanel(L, H * 0.75, mat);
+        frFront.rotation.x = Math.PI / 2 - 0.25;
+        frBase.add(frFront);
+
+        // Vách sau cao chót vót vát cong
+        var frBack = createBoxPanel(L, H * 1.35, mat);
+        frBack.position.set(0, W * 0.7, 0);
+        frBack.rotation.x = -Math.PI / 2 + 0.15;
+        frBase.add(frBack);
+
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 10. VỎ HỘP MẸ ỐNG RÚT (Sleeve Drawer) & KHAY ĐỊNH HÌNH ──
+      else if (model.boxType === 'sleeve-drawer' || model.boxType === 'divider-tray') {
+        var slBase = createBoxPanel(L, W, mat);
+        grp.add(slBase);
+        slBase.rotation.x = -Math.PI / 2;
+
+        var slF = createBoxPanel(L, H, mat);
+        slF.rotation.x = Math.PI / 2;
+        slBase.add(slF);
+
+        var slB = createBoxPanel(L, H, mat);
+        slB.position.set(0, W, 0);
+        slB.rotation.x = -Math.PI / 2;
+        slBase.add(slB);
+
+        var slTop = createBoxPanel(L, W, mat);
+        slTop.position.set(0, H, 0);
+        slTop.rotation.x = -Math.PI / 2;
+        slF.add(slTop);
+
+        grp.position.set(-L / 2, 0, W / 2);
+      }
+
+      // ── 11. COMBO PHỐI CẢNH TOÀN BỘ (Âm Dương & Trung Thu) ──
+      else if (model.boxType === 'combo-amduong') {
+        // Đáy hộp âm dương nằm dưới
+        var botTray = build3DModel({ boxType: 'tray', drc: { L: 370, W: 300, H: 70 } }, 100);
+        grp.add(botTray);
+
+        // Nắp hộp âm dương đặt hé mở 35% trên đỉnh
+        var topLidM = build3DModel({ boxType: 'tray', drc: { L: 375, W: 305, H: 40 } }, 100);
+        topLidM.position.set(40, 60, -40);
+        topLidM.rotation.y = 0.12;
+        grp.add(topLidM);
+
+        // Túi giấy đứng bên cạnh
+        var bagM = build3DModel({ boxType: 'tote-bag', drc: { L: 385, W: 80, H: 315 } }, 100);
+        bagM.position.set(-260, 0, 80);
+        bagM.rotation.y = 0.35;
+        grp.add(bagM);
+      }
+      else if (model.boxType === 'combo-mooncake') {
+        // Hộp mẹ ống rút
+        var slv = build3DModel({ boxType: 'sleeve-drawer', drc: { L: 320, W: 255, H: 75 } }, 100);
+        grp.add(slv);
+
+        // Khay ngăn kéo rút hờ 120mm ra ngoài
+        var inDrawer = build3DModel({ boxType: 'tray', drc: { L: 315, W: 250, H: 72 } }, 100);
+        inDrawer.position.set(130, 1, 0);
+        grp.add(inDrawer);
+
+        // 4 hộp con xếp ngay ngắn trong khay
+        for (var ci = 0; ci < 4; ci++) {
+          var cBox = build3DModel({ boxType: 'reverse-tuck', drc: { L: 85, W: 85, H: 55 } }, 100);
+          var cxOff = 45 + (ci % 2) * 95;
+          var czOff = -50 + Math.floor(ci / 2) * 95;
+          cBox.position.set(cxOff, 4, czOff);
+          grp.add(cBox);
+        }
+
+        // Hộp trà cao đứng bên cạnh khay
+        var teaB = build3DModel({ boxType: 'reverse-tuck', drc: { L: 75, W: 75, H: 140 } }, 100);
+        teaB.position.set(245, 4, 0);
+        grp.add(teaB);
+      }
+
+      return grp;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // RENDER CONTROLLER & CAMERA FIT
+    // ═════════════════════════════════════════════════════════════════════════
+    function renderActiveModel() {
+      // Dọn dẹp mô hình cũ
+      while (currentModelGroup.children.length > 0) {
+        var obj = currentModelGroup.children[0];
+        currentModelGroup.remove(obj);
+      }
+
+      var modelObj = build3DModel(state.activeModel, state.sliderVal);
+      currentModelGroup.add(modelObj);
+
+      // Cập nhật thông tin UI
+      document.getElementById('cur-name').textContent = state.activeModel.name;
+      var d = state.activeModel.drc;
+      document.getElementById('cur-meta').textContent =
+        'Kích thước DRC: ' + d.L + '×' + d.W + '×' + d.H + 'mm | ' + state.activeModel.desc;
+    }
+
+    function fitCamera(keepAngle) {
+      var d = state.activeModel.drc;
+      var maxDim = Math.max(d.L, d.W, d.H, 120);
+      var dist = maxDim * 2.5;
+
+      if (!keepAngle) {
+        // Góc Isometric Pacdora chuẩn
+        camera.position.set(dist * 0.72, dist * 0.75, dist * 1.05);
+      }
+      controls.target.set(0, d.H * 0.35, 0);
+      camera.near = 1;
+      camera.far = dist * 25;
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
+
+    function onResize() {
+      var w = container.clientWidth;
+      var h = container.clientHeight;
+      if (w === 0 || h === 0) return;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', onResize);
+
+    // Vòng lặp render
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // RENDER DANH SÁCH 28 THẺ MẪU TRONG SIDEBAR
+    // ═════════════════════════════════════════════════════════════════════════
+    function renderSidebar() {
+      var list = document.getElementById('models-list');
+      list.innerHTML = '';
+      var q = document.getElementById('inp-search').value.toLowerCase().trim();
+      var activeFilter = document.querySelector('.pill.active').dataset.group;
+
+      var filtered = MODELS.filter(function (m) {
+        var matchGroup = (activeFilter === 'all') || (m.group === activeFilter);
+        var matchText = !q || m.name.toLowerCase().indexOf(q) !== -1 || m.desc.toLowerCase().indexOf(q) !== -1;
+        return matchGroup && matchText;
+      });
+
+      filtered.forEach(function (m, idx) {
+        var card = document.createElement('div');
+        card.className = 'model-card' + (m.id === state.activeModel.id ? ' active' : '');
+        card.innerHTML =
+          '<div class="m-num">' + (idx + 1) + '</div>' +
+          '<div class="m-info">' +
+            '<div class="m-title">' + m.name + '</div>' +
+            '<div class="m-sub">' +
+              '<span class="m-tag">' + m.drc.L + '×' + m.drc.W + '×' + m.drc.H + '</span>' +
+              '<span>' + m.boxType + '</span>' +
+            '</div>' +
+          '</div>';
+
+        card.addEventListener('click', function () {
+          state.activeModel = m;
+          document.querySelectorAll('.model-card').forEach(function (c) { c.classList.remove('active'); });
+          card.classList.add('active');
+          renderActiveModel();
+          fitCamera(false);
+          showToast('Đang xem: ' + m.name);
+        });
+
+        list.appendChild(card);
+      });
+    }
+
+    // Filter pills
+    document.getElementById('filter-pills').addEventListener('click', function (e) {
+      var p = e.target.closest('.pill');
+      if (!p) return;
+      document.querySelectorAll('.pill').forEach(function (el) { el.classList.remove('active'); });
+      p.classList.add('active');
+      renderSidebar();
+    });
+
+    document.getElementById('inp-search').addEventListener('input', renderSidebar);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // CONTROLS & EVENT LISTENERS
+    // ═════════════════════════════════════════════════════════════════════════
+    // Thanh trượt gập mở
+    var foldSlider = document.getElementById('slider-fold');
+    foldSlider.addEventListener('input', function () {
+      state.sliderVal = parseFloat(this.value);
+      renderActiveModel();
+    });
+
+    // Wireframe toggle
+    document.getElementById('btn-toggle-wire').addEventListener('click', function () {
+      isWireframe = !isWireframe;
+      this.classList.toggle('active', isWireframe);
+      renderActiveModel();
+    });
+
+    // Reset camera
+    document.getElementById('btn-reset-cam').addEventListener('click', function () {
+      fitCamera(false);
+    });
+
+    // Đổi góc nhìn
+    document.getElementById('btn-view-iso').addEventListener('click', function () { fitCamera(false); });
+    document.getElementById('btn-view-front').addEventListener('click', function () {
+      var d = state.activeModel.drc;
+      camera.position.set(0, d.H * 0.5, Math.max(d.L, d.W, d.H) * 2.8);
+      controls.target.set(0, d.H * 0.5, 0);
+      controls.update();
+    });
+    document.getElementById('btn-view-top').addEventListener('click', function () {
+      var d = state.activeModel.drc;
+      camera.position.set(0, Math.max(d.L, d.W, d.H) * 3.2, 0.01);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    });
+
+    // Chọn chất liệu giấy
+    document.querySelectorAll('.m-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        document.querySelectorAll('.m-chip').forEach(function (c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+        currentMaterialName = chip.dataset.mat;
+        renderActiveModel();
+        showToast('Đã đổi chất liệu: ' + chip.textContent);
+      });
+    });
+
+    // Toast
+    function showToast(msg) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(function () { t.classList.remove('show'); }, 2200);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // XUẤT ẢNH MOCKUP 3D (PNG) CHO 1 MẪU HOẶC TOÀN BỘ 28 MẪU
+    // ═════════════════════════════════════════════════════════════════════════
+    function captureCurrentCanvas(filename) {
+      renderer.render(scene, camera);
+      var dataUrl = canvas.toDataURL('image/png');
+      var a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename || (state.activeModel.id + '.png');
+      a.click();
+    }
+
+    document.getElementById('btn-export-current').addEventListener('click', function () {
+      captureCurrentCanvas(state.activeModel.id + '.png');
+      showToast('✓ Đã tải về ảnh: ' + state.activeModel.name);
+    });
+
+    // Batch Export toàn bộ 28 ảnh 3D
+    document.getElementById('btn-batch-export').addEventListener('click', function () {
+      runBatchExport();
+    });
+
+    function runBatchExport(onComplete) {
+      var modal = document.getElementById('batch-modal');
+      var pBar = document.getElementById('batch-progress-bar');
+      var pText = document.getElementById('batch-status-text');
+      modal.style.display = 'flex';
+
+      var curIdx = 0;
+      state.sliderVal = 100;
+      foldSlider.value = 100;
+
+      function step() {
+        if (curIdx >= MODELS.length) {
+          pBar.style.width = '100%';
+          pText.textContent = '✓ Đã xuất thành công toàn bộ ' + MODELS.length + ' ảnh 3D!';
+          setTimeout(function () {
+            modal.style.display = 'none';
+            showToast('🎉 Hoàn tất xuất ' + MODELS.length + ' ảnh 3D Mockup!');
+            if (onComplete) onComplete();
+          }, 1200);
+          return;
+        }
+
+        var m = MODELS[curIdx];
+        state.activeModel = m;
+        renderActiveModel();
+        fitCamera(false);
+
+        // Render và chụp
+        renderer.render(scene, camera);
+        var dataUrl = canvas.toDataURL('image/png');
+
+        // Gửi tới server Node.js nếu đang chạy hoặc tải qua trình duyệt
+        fetch('/save_render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: m.id + '.png', data: dataUrl })
+        }).catch(function () {
+          // Fallback tải trực tiếp
+          var a = document.createElement('a');
+          a.href = dataUrl;
+          a.download = m.id + '.png';
+          a.click();
+        });
+
+        curIdx++;
+        var percent = Math.round((curIdx / MODELS.length) * 100);
+        pBar.style.width = percent + '%';
+        pText.textContent = '[' + curIdx + '/' + MODELS.length + '] Đang tạo ảnh 3D: ' + m.name + '...';
+
+        setTimeout(step, 250);
+      }
+
+      step();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // KHỞI ĐỘNG
+    // ═════════════════════════════════════════════════════════════════════════
+    onResize();
+    renderSidebar();
+    renderActiveModel();
+    fitCamera(false);
+    animate();
+
+    // Tự động chạy batch nếu có query ?autorun=1
+    if (window.location.search.indexOf('autorun=1') !== -1) {
+      setTimeout(function () {
+        runBatchExport(function () {
+          console.log('BATCH_RENDER_FINISHED');
+        });
+      }, 800);
+    }
+
+  })();
+  </script>
+</body>
+</html>
